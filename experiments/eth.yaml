@@ -1,0 +1,87 @@
+# Name of the experiment
+name: "eth"
+
+# -----------------------------------------------------------------------------
+#                             Optimization settings                           |
+# -----------------------------------------------------------------------------
+
+# Buffer size of the tf.data.Dataset.prefetch option
+prefetchSize: 100
+# How many sequences to use in each minibatch
+batchSize: 10
+# Number of epochs
+epochs: 50
+
+
+# -----------------------------------------------------------------------------
+#                             Dataset parameters                              |
+# -----------------------------------------------------------------------------
+
+# Folder of the datasets
+dataPath: "../datasets"
+# Name of the training files inside the dataPath
+trainDatasets:
+  - "train/biwi_hotel_train.txt"
+  - "train/crowds_zara01_train.txt"
+  - "train/crowds_zara02_train.txt"
+  - "train/crowds_zara03_train.txt"
+  - "train/students001_train.txt"
+  - "train/students003_train.txt"
+  - "train/uni_examples_train.txt"
+# Name of the validation files inside the dataPath
+validationDatasets:
+  - "val/biwi_hotel_val.txt"
+  - "val/crowds_zara01_val.txt"
+  - "val/crowds_zara02_val.txt"
+  - "val/crowds_zara03_val.txt"
+  - "val/students001_val.txt"
+  - "val/students003_val.txt"
+  - "val/uni_examples_val.txt"
+# Name of the validation files inside the dataPath
+testDatasets:
+  - "test/biwi_eth.txt"
+# Delimiter used in the files of the dataset
+delimiter: "tab"
+# Number of frame observed
+obsLen: 8
+# Number of frame that the model has to predict
+predLen: 12
+# Number of frames to skip while making the dataset. If True, the number of
+# frame to skip is random, between 1 and (obsLen + predLen). For e.g. if
+# sequence_1 in the dataset is from Frame_1 - Frame_N and skip = 5 then the
+# sequence_2 will be start from Frame_N+5
+skip: 1
+
+# -----------------------------------------------------------------------------
+#                              Model parameters                               |
+# -----------------------------------------------------------------------------
+
+# Maximum number of pedestrian per frame
+maxNumPed: 60
+# Size of the sum pooling window
+gridSize: 8
+# Size of the neighborhood
+neighborhoodSize: 2
+# Number of hidden
+lstmSize: 128
+# Dimension of the embedding layer 
+embeddingSize: 64
+# Learning rate
+learningRate: 0.003
+# Dropout probability
+dropout: 0.75
+# Type of pooling module to use. Two option supported: social or null
+poolingModule: "social"
+
+# -----------------------------------------------------------------------------
+#                                Logger settings                              |
+# -----------------------------------------------------------------------------
+
+# Folder where to save the logs
+logFolder: "../logs"
+# Logger level
+level: "INFO"
+# Folder where to save the model
+modelFolder: "../models"
+# Save the sampled coordinates
+saveCoordinates: true
