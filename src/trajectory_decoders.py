@@ -54,7 +54,7 @@ class SocialDecoder:
         """
         # If pooling_module is not None, apply the pooling_module
         if self.__pooling_module is not None:
-            cell_input = self.__pooling_module(ped, self.__input_pass, states)
+            cell_input = tf.concat([self.__input_pass, self.__pooling], 1)
         else:
             cell_input = self.__input_pass
 
@@ -63,11 +63,21 @@ class SocialDecoder:
 
         # If output_layer is not None, apply the output layer
         if self.__output_layer is not None:
-            cell_output = self.__output_layer(cell_output)
+            layered_output = self.__output_layer(cell_output)
+        else:
+            layered_output = cell_output
 
-        return (cell_output, new_state)
+        return (cell_output, new_state, layered_output)
 
-    def initialize(self, step, input_pass_gt, input_pass, cell_states=None):
+    def initialize(
+        self,
+        step,
+        input_pass_gt,
+        input_pass,
+        cell_states,
+        hidden_states=None,
+        peds_mask=None,
+    ):
         """Store the variables needed for computing one pass of decoding.
 
         Args:
@@ -80,4 +90,11 @@ class SocialDecoder:
 
         """
         self.__cell_states = cell_states
+        self.__hidden_states = hidden_states
+        self.__peds_mask = peds_mask
         self.__input_pass = self.__coordinates_helper(step, input_pass_gt, input_pass)
+
+        if self.__pooling_module is not None:
+            self.__pooling = self.__pooling_module(
+                self.__input_pass, self.__hidden_states, self.__peds_mask
+            )
