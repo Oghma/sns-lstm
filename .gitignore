@@ -1,0 +1,5 @@
+# Byte-compiled
+__pycache__/
+datasets/processed
+logs/
+models
