@@ -12,6 +12,7 @@ from model import SocialModel
 from coordinates_helpers import train_helper
 from losses import social_loss_function
 from position_estimates import social_train_position_estimate
+from pooling_modules import SocialPooling
 
 
 def logger(data, args):
@@ -119,6 +120,18 @@ def main():
     logging.info("Creating the helper for the coordinates")
     helper = train_helper
 
+    pooling_module = None
+    if data["poolingModule"] == "social":
+        logging.info("Creating the {} pooling".format(data["poolingModule"]))
+        pooling_class = SocialPooling(
+            data["gridSize"],
+            data["neighborhoodSize"],
+            data["maxNumPed"],
+            data["embeddingSize"],
+            data["lstmSize"],
+        )
+        pooling_module = pooling_class.pooling
+
     logging.info("Creating the model...")
     start = time.time()
     model = SocialModel(
@@ -126,6 +139,7 @@ def main():
         helper,
         social_train_position_estimate,
         social_loss_function,
+        pooling_module,
         lstm_size=data["lstmSize"],
         max_num_ped=data["maxNumPed"],
         trajectory_size=trajectory_size,
