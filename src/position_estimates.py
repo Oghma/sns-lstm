@@ -140,3 +140,38 @@ def social_sample_position_estimate(
         dist = tf.distributions.Normal([mu_x, mu_y], [std_x, std_y])
         coordinates = tf.transpose(dist.sample())
         return coordinates, layer_output(coordinates)
+
+
+def social_sample_position_estimate_stabilized(
+    cell_output, coordinates_gt, output_size, layer_output
+):
+    """Calculate the coordinates in sampling phase. Stabilized version.
+
+    Args:
+      cell_output: tensor of shape [max_num_ped, output_size]. The output of the
+        LSTM after applying a linear layer.
+      coordinates_gt: tensor of shape [max_num_ped, 2]. Ground truth
+        coordinates.
+      output_size: int. Dimension of the output size.
+      layer_output: tf.layer instance. Layer used for process the new
+        coordinates sampled.
+
+    Returns:
+      tuple containing the new coordinates sampled and the output of
+        layer_output with the new coordinates
+
+    """
+
+    with tf.name_scope("Calculate_coordinates"):
+        # Equations 20 -> 22
+        # Split and squeeze to have shape [max_num_ped]
+        mu_x, mu_y, std_x, std_y, rho = list(
+            map(lambda x: tf.squeeze(x, 1), tf.split(cell_output, output_size, 1))
+        )
+        std_x = tf.exp(tf.abs(std_x))
+        std_y = tf.exp(tf.abs(std_y))
+
+        # Sample the coordinates
+        dist = tf.distributions.Normal([mu_x, mu_y], [std_x, std_y])
+        coordinates = tf.transpose(dist.sample())
+        return coordinates, layer_output(coordinates)
