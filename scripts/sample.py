@@ -133,11 +133,11 @@ def main():
     if data["poolingModule"] == "social":
         logging.info("Creating the {} pooling".format(data["poolingModule"]))
         pooling_class = SocialPooling(
-            data["gridSize"],
-            data["neighborhoodSize"],
-            data["maxNumPed"],
-            data["embeddingSize"],
-            data["lstmSize"],
+            grid_size=data["gridSize"],
+            neighborhood_size=data["neighborhoodSize"],
+            max_num_ped=data["maxNumPed"],
+            embedding_size=data["embeddingSize"],
+            rnn_size=data["lstmSize"],
         )
         pooling_module = pooling_class.pooling
 
@@ -153,7 +153,7 @@ def main():
         max_num_ped=data["maxNumPed"],
         trajectory_size=trajectory_size,
         embedding_size=data["embeddingSize"],
-        learnin_rate=data["learningRate"],
+        learning_rate=data["learningRate"],
         dropout=data["dropout"],
     )
     end = time.time() - start
