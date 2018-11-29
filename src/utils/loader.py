@@ -73,27 +73,30 @@ class DataLoader:
 
         Returns:
             Generator object which contains a list containing sequences of
-            trajectories of size batch_size and a list containing the number of
-            pedestrian in the sequences.
+          trajectories of size batch_size a list containing the associated grid
+          layer of size batch_size and a list containing the number of
+          pedestrian in the sequences.
 
         """
         it = self.next_sequence()
         for batch in range(self.num_batches):
             batch = []
+            grid_batch = []
             peds_in_batch = []
 
             for size in range(self.batch_size):
                 data = next(it)
                 batch.append(data[0])
-                peds_in_batch.append(data[0])
-            yield batch, peds_in_batch
+                grid_batch.append(data[1])
+                peds_in_batch.append(data[2])
+            yield batch, grid_batch, peds_in_batch
 
     def next_sequence(self):
         """Generator method that returns an iterator pointing to the next sequence.
 
         Returns:
-            Generator object which contains a sequence of trajectories and the
-            number of pedestrian in the trajectory.
+          Generator object which contains a sequence of trajectories, the
+          associated grid layer and the number of pedestrian in the sequence.
 
         """
         # Iterate through all sequences
@@ -191,21 +194,34 @@ class DataLoader:
 
         Returns:
           tuple containing a numpy array with shape [max_num_ped,
-          trajectory_size, 2] that contains all the trajectories and the number
-          of pedestrian in the sequence
+          trajectory_size, 2] that contains all the trajectories, a numpy array
+          with shape [max_num_ped, max_num_ped, trajectory_size] that is the
+          grid layer and the number of pedestrian in the sequence.
 
         """
         sequence = np.zeros((self.max_num_ped, self.trajectory_size, 2))
+        grid = np.zeros(
+            (self.max_num_ped, self.max_num_ped, self.trajectory_size), dtype=bool
+        )
         peds_in_sequence = len(trajectories)
 
         for index, trajectory in enumerate(trajectories):
             sequence[index] = trajectory[:, [2, 3]]
-        return sequence, peds_in_sequence
+
+        # Create the grid layer. Set to True only the pedestrians that are in
+        # the sequence
+        grid[:peds_in_sequence, :peds_in_sequence] = True
+        # Grid layer ignores the pedestrian itself
+        for ped in range(peds_in_sequence):
+            grid[ped, ped] = False
+
+        return sequence, grid, peds_in_sequence
 
     def __type_and_shape(self):
         """Define the type and the shape of the arrays that tensorflow will use"""
-        self.output_types = (tf.float32, tf.int32)
+        self.output_types = (tf.float32, tf.bool, tf.int32)
         self.shape = (
             tf.TensorShape([self.max_num_ped, self.trajectory_size, 2]),
+            tf.TensorShape([self.max_num_ped, self.max_num_ped, self.trajectory_size]),
             tf.TensorShape([]),
         )

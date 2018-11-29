@@ -12,6 +12,7 @@ class SocialModel:
         helper,
         position_estimate,
         loss_function,
+        pooling_module=None,
         lstm_size=128,
         max_num_ped=100,
         trajectory_size=20,
@@ -26,6 +27,7 @@ class SocialModel:
           helper: A coordinates helper function.
           position_estimate: A position_estimate function.
           loss_function: a loss funtcion.
+          pooling_module: A pooling module function
           lstm_size: int. The number of units in the LSTM cell.
           max_num_ped: int. Maximum number of pedestrian in a single frame.
           trajectories_size: int. Length of the trajectory (obs_length +
@@ -39,8 +41,11 @@ class SocialModel:
         # Create the tensor for input_data of shape
         # [max_num_ped, trajectory_size, 2]
         self.input_data = dataset.tensors[0]
+        # Create the tensor for the ped mask of shape [max_num_ped, max_num_ped,
+        # trajectory_size]
+        self.peds_mask = dataset.tensors[1]
         # Create the tensor for num_peds_frame
-        self.num_peds_frame = dataset.tensors[1]
+        self.num_peds_frame = dataset.tensors[2]
 
         # Store the parameters
         # In training phase the list contains the values to minimize. In
@@ -51,6 +56,8 @@ class SocialModel:
         # The predicted coordinates processed by the linear layer in sampling
         # phase
         new_coordinates_processed = None
+        # Output (or hidden states) of the LSTMs
+        cell_output = tf.zeros([max_num_ped, lstm_size], tf.float32)
 
         # Output size
         output_size = 5
@@ -82,12 +89,11 @@ class SocialModel:
             )
 
         # Define the SocialTrajectoryDecoder.
-        # NOTE For now no pooling
         decoder = trajectory_decoders.SocialDecoder(
             self.cell,
             max_num_ped,
             helper,
-            pooling_module=None,
+            pooling_module=pooling_module,
             output_layer=self.output_layer,
         )
 
@@ -109,17 +115,19 @@ class SocialModel:
                 frame,
                 self.coordinates_preprocessed[:, frame],
                 new_coordinates_processed,
-                cell_states=self.cell_states,
+                self.cell_states,
+                hidden_states=cell_output,
+                peds_mask=self.peds_mask[:, :, frame],
             )
             # compute_pass returns a tuple of two tensors. cell_output are the
             # output of the self.cell with shape [max_num_ped , output_size] and
             # cell_states are the states with shape
             # [max_num_ped, LSTMStateTuple()]
-            cell_output, self.cell_states = decoder.step()
+            cell_output, self.cell_states, layered_output = decoder.step()
 
             # Compute the new coordinates
             new_coordinates, new_coordinates_processed = position_estimate(
-                cell_output,
+                layered_output,
                 self.input_data[:, frame + 1],
                 output_size,
                 self.coordinates_layer,
