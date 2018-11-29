@@ -3,6 +3,7 @@ initialize method that store the variables for the step method and a step method
 that compute a step of decoding the coordinates
 
 """
+import tensorflow as tf
 
 
 class SocialDecoder:
