@@ -228,9 +228,42 @@ def main():
         if saveCoordinates:
             coordinates_predicted = np.array(coordinates_predicted)
             coordinates_gt = np.array(coordinates_gt)
-            np.save(coordinates_path + "_predicted", coordinates_predicted)
-            np.save(coordinates_path + "_gt", coordinates_gt)
-            np.save(coordinates_path + "_peds", peds_in_sequence)
+            saveCoords(
+                coordinates_predicted,
+                coordinates_gt,
+                peds_in_sequence,
+                data["predLen"],
+                coordinates_path,
+            )
+
+
+def saveCoords(pred, coordinates_gt, peds_in_sequence, pred_len, coordinates_path):
+    """Save the predicted, the ground truth coordiantes and the number of
+    pedestrian in sequence. The files are in numpy format.
+
+    Args:
+      pred: numpy array [num_sequence, trajectory_size - 1,
+        max_num_ped, 2]. The predicted coordinates.
+      coordinates_gt: numpy array [num_sequence, max_num_ped, trajectory_size,
+        2]. The ground truth coordinates.
+      peds_in_sequence: numpy array [num_sequence]. The number of pedestrian in
+        each sequence.
+      pred_len: int. Number of prediction time-steps.
+      coordinates_path: string. Path to where to save the coordinates.
+
+    """
+    coordinates_pred = coordinates_gt.copy()
+
+    for index, sequence in enumerate(pred):
+        coords = sequence[-pred_len:, : peds_in_sequence[index]]
+        # Change the shape of the array from [trajectory_size, max_num_ped, 2]
+        # to [max_num_ped, trajectory_size, 2]
+        coords = np.moveaxis(coords, 0, 1)
+        coordinates_pred[index, : peds_in_sequence[index], -pred_len:] = coords
+
+    np.save(coordinates_path + "_gt", coordinates_gt)
+    np.save(coordinates_path + "_predicted", coordinates_pred)
+    np.save(coordinates_path + "_peds", peds_in_sequence)
 
 
 if __name__ == "__main__":
