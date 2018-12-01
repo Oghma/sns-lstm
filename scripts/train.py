@@ -85,6 +85,17 @@ def main():
     # Define the logger
     logger(data, args)
 
+    remainSpaces = 29 - len(data["name"])
+    logging.info(
+        "\n"
+        + "--------------------------------------------------------------------------------\n"
+        + "|                            Training experiment: "
+        + data["name"]
+        + " " * remainSpaces
+        + "|\n"
+        + "--------------------------------------------------------------------------------\n"
+    )
+
     trajectory_size = data["obsLen"] + data["predLen"]
 
     logging.info("Loading the training datasets...")
