@@ -4,7 +4,7 @@ import tensorflow as tf
 
 
 def social_train_position_estimate(cell_output, coordinates_gt, output_size, *args):
-    """Calculate the parameters to sample the new coordinates in training phase.
+    """Calculate the probability density function in training phase.
 
     Args:
       cell_output: tensor of shape [max_num_ped, output_size]. The output of the
@@ -14,7 +14,7 @@ def social_train_position_estimate(cell_output, coordinates_gt, output_size, *ar
       output_size: int. Dimension of the output size.
 
     Returns:
-      tuple containing the value to minimize.
+      tuple containing a tensor of shape [max_num_ped, 2] that contains the pdf.
 
     """
     # Calculate the new coordinates based on Graves (2013) equations. Assume a
@@ -54,8 +54,8 @@ def social_train_position_estimate(cell_output, coordinates_gt, output_size, *ar
 def social_train_position_estimate_stabilized(
     cell_output, coordinates_gt, output_size, *args
 ):
-    """Calculate the parameters to sample the new coordinates in training phase.
-    Stabilized version.
+    """Calculate the probability density function in training phase. Stabilized
+    version.
 
     Args:
       cell_output: tensor of shape [max_num_ped, output_size]. The output of the
@@ -65,7 +65,7 @@ def social_train_position_estimate_stabilized(
       output_size: int. Dimension of the output size.
 
     Returns:
-      tuple containing the value to minimize.
+      tuple containing a tensor of shape [max_num_ped, 2] that contains the pdf.
 
     """
     # Calculate the new coordinates based on Graves (2013) equations. Assume a
@@ -122,8 +122,10 @@ def social_sample_position_estimate(
         coordinates sampled.
 
     Returns:
-      tuple containing the new coordinates sampled and the output of
-        layer_output with the new coordinates
+      tuple containing two tensors: the first has shape [max_num_ped,2] and
+        contains the sampled coordinates. The second has shape [max_num_ped,
+        embedding_size] and contains the output of the linear layer with input
+        the sampled coordinates.
 
     """
 
@@ -136,9 +138,12 @@ def social_sample_position_estimate(
         std_x = tf.exp(std_x)
         std_y = tf.exp(std_y)
 
+        mu = tf.stack([mu_x, mu_y], 1)
+        std = tf.stack([std_x, std_y], 1)
+
         # Sample the coordinates
-        dist = tf.distributions.Normal([mu_x, mu_y], [std_x, std_y])
-        coordinates = tf.transpose(dist.sample())
+        dist = tf.distributions.Normal(mu, std)
+        coordinates = dist.sample()
         return coordinates, layer_output(coordinates)
 
 
@@ -157,8 +162,10 @@ def social_sample_position_estimate_stabilized(
         coordinates sampled.
 
     Returns:
-      tuple containing the new coordinates sampled and the output of
-        layer_output with the new coordinates
+      tuple containing two tensors: the first has shape [max_num_ped,2] and
+        contains the sampled coordinates. The second has shape [max_num_ped,
+        embedding_size] and contains the output of the linear layer with input
+        the sampled coordinates.
 
     """
 
@@ -171,7 +178,10 @@ def social_sample_position_estimate_stabilized(
         std_x = tf.exp(tf.abs(std_x))
         std_y = tf.exp(tf.abs(std_y))
 
+        mu = tf.stack([mu_x, mu_y], 1)
+        std = tf.stack([std_x, std_y], 1)
+
         # Sample the coordinates
-        dist = tf.distributions.Normal([mu_x, mu_y], [std_x, std_y])
-        coordinates = tf.transpose(dist.sample())
+        dist = tf.distributions.Normal(mu, std)
+        coordinates = dist.sample()
         return coordinates, layer_output(coordinates)
