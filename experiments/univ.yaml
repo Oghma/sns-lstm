@@ -18,7 +18,7 @@ epochs: 50
 # -----------------------------------------------------------------------------
 
 # Folder of the datasets
-dataPath: "../datasets"
+dataPath: "datasets"
 # Name of the training files inside the dataPath
 trainDatasets:
   - "train/biwi_eth_train.txt"
@@ -77,10 +77,10 @@ poolingModule: "social"
 # -----------------------------------------------------------------------------
 
 # Folder where to save the logs
-logFolder: "../logs"
+logFolder: "logs"
 # Logger level
 level: "INFO"
 # Folder where to save the model
-modelFolder: "../models"
+modelFolder: "models"
 # Save the sampled coordinates
 saveCoordinates: true
