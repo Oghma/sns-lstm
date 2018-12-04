@@ -1,0 +1,4 @@
+numpy==1.15.4
+PyYAML==3.13
+tensorflow-gpu==1.12.0
+beautifultable==0.5.3
