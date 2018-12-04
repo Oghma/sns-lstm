@@ -14,6 +14,7 @@ from coordinates_helpers import sample_helper
 from losses import social_loss_function
 from position_estimates import social_sample_position_estimate
 from pooling_modules import SocialPooling
+from beautifultable import BeautifulTable
 
 
 def logger(data, args):
@@ -43,6 +44,11 @@ def logger(data, args):
 
     # Get the logger
     logger = logging.getLogger()
+    # Remove handlers added previously
+    for handler in logger.handlers[:]:
+        if isinstance(handler, logging.FileHandler):
+            handler.close()
+        logger.removeHandler(handler)
     if log_folder is not None:
         # Add a FileHandler
         file_handler = logging.FileHandler(log_file)
@@ -64,7 +70,7 @@ def main():
     parser.add_argument(
         "modelParams",
         type=str,
-        help="Path to the yaml file that contain the model parameters",
+        help="Path to the file or folder with the parameters of the experiments",
     )
     parser.add_argument(
         "-logL",
@@ -87,165 +93,182 @@ def main():
     )
     args = parser.parse_args()
 
-    # Load the parameters
-    with open(args.modelParams) as fp:
-        data = yaml.load(fp)
-    # Define the logger
-    logger(data, args)
+    if os.path.isdir(args.modelParams):
+        names_experiments = os.listdir(args.modelParams)
+        experiments = [
+            os.path.join(args.modelParams, experiment)
+            for experiment in names_experiments
+        ]
+    else:
+        experiments = [args.modelParams]
 
-    remainSpaces = 29 - len(data["name"])
-    logging.info(
-        "\n"
-        + "--------------------------------------------------------------------------------\n"
-        + "|                            Sampling experiment: "
-        + data["name"]
-        + " " * remainSpaces
-        + "|\n"
-        + "--------------------------------------------------------------------------------\n"
-    )
+    # Table will show the metrics of each experiment
+    results = BeautifulTable()
+    results.column_headers = ["Name experiment", "ADE", "FDE"]
 
-    trajectory_size = data["obsLen"] + data["predLen"]
-    saveCoordinates = False
+    for experiment in experiments:
+        # Load the parameters
+        with open(experiment) as fp:
+            data = yaml.load(fp)
+        # Define the logger
+        logger(data, args)
 
-    if args.saveCoordinates is not None:
-        saveCoordinates = args.saveCoordinates
-    elif "saveCoordinates" in data:
-        saveCoordinates = data["saveCoordinates"]
-
-    if saveCoordinates:
-        coordinates_path = os.path.join("coordinates", data["name"])
-        if not os.path.exists("coordinates"):
-            os.makedirs("coordinates")
-
-    logging.info("Loading the test datasets...")
-    test_loader = utils.DataLoader(
-        data["dataPath"],
-        data["testDatasets"],
-        delimiter=data["delimiter"],
-        skip=data["skip"],
-        max_num_ped=data["maxNumPed"],
-        trajectory_size=trajectory_size,
-        batch_size=data["batchSize"],
-    )
-
-    logging.info("Creating the test dataset pipeline...")
-    dataset = utils.TrajectoriesDataset(
-        test_loader,
-        val_loader=None,
-        batch=False,
-        batch_size=data["batchSize"],
-        prefetch_size=data["prefetchSize"],
-    )
-
-    logging.info("Creating the helper for the coordinates")
-    helper = sample_helper(data["obsLen"])
-
-    pooling_module = None
-    if data["poolingModule"] == "social":
-        logging.info("Creating the {} pooling".format(data["poolingModule"]))
-        pooling_class = SocialPooling(
-            grid_size=data["gridSize"],
-            neighborhood_size=data["neighborhoodSize"],
-            max_num_ped=data["maxNumPed"],
-            embedding_size=data["embeddingSize"],
-            rnn_size=data["lstmSize"],
-        )
-        pooling_module = pooling_class.pooling
-
-    logging.info("Creating the model...")
-    start = time.time()
-    model = SocialModel(
-        dataset,
-        helper,
-        social_sample_position_estimate,
-        social_loss_function,
-        pooling_module,
-        lstm_size=data["lstmSize"],
-        max_num_ped=data["maxNumPed"],
-        trajectory_size=trajectory_size,
-        embedding_size=data["embeddingSize"],
-        learning_rate=data["learningRate"],
-        dropout=data["dropout"],
-    )
-    end = time.time() - start
-    logging.debug("Model created in {:.2f}s".format(end))
-
-    # Define the path to the file that contains the variables of the model
-    data["modelFolder"] = os.path.join(data["modelFolder"], data["name"])
-    model_path = os.path.join(data["modelFolder"], data["name"])
-
-    # Create a saver
-    saver = tf.train.Saver()
-
-    # Add to the computation graph the evaluation functions
-    ade_sequence = utils.average_displacement_error(
-        model.new_coordinates[-data["predLen"] :],
-        model.input_data[:, -data["predLen"] :],
-        model.num_peds_frame,
-    )
-
-    fde_sequence = utils.final_displacement_error(
-        model.new_coordinates[-1], model.input_data[:, -1], model.num_peds_frame
-    )
-
-    ade = 0
-    fde = 0
-    coordinates_predicted = []
-    coordinates_gt = []
-    peds_in_sequence = []
-
-    # ============================ START SAMPLING ============================
-
-    with tf.Session() as sess:
-        # Restore the model trained
-        saver.restore(sess, model_path)
-
-        # Initialize the iterator of the sample dataset
-        sess.run(dataset.init_train)
-
+        remainSpaces = 29 - len(data["name"])
         logging.info(
             "\n"
             + "--------------------------------------------------------------------------------\n"
-            + "|                                Start sampling                                |\n"
+            + "|                            Sampling experiment: "
+            + data["name"]
+            + " " * remainSpaces
+            + "|\n"
             + "--------------------------------------------------------------------------------\n"
         )
 
-        for seq in range(test_loader.num_sequences):
-            logging.info(
-                "Sample trajectory number {}/{}".format(
-                    seq + 1, test_loader.num_sequences
-                )
-            )
+        trajectory_size = data["obsLen"] + data["predLen"]
+        saveCoordinates = False
 
-            ade_value, fde_value, coordinates_pred_value, coordinates_gt_value, num_peds = sess.run(
-                [
-                    ade_sequence,
-                    fde_sequence,
-                    model.new_coordinates,
-                    model.input_data,
-                    model.num_peds_frame,
-                ]
-            )
-            ade += ade_value
-            fde += fde_value
-            coordinates_predicted.append(coordinates_pred_value)
-            coordinates_gt.append(coordinates_gt_value)
-            peds_in_sequence.append(num_peds)
-
-        ade = ade / test_loader.num_sequences
-        fde = fde / test_loader.num_sequences
-        logging.info("Sampling finished. ADE: {:.4f} FDE: {:.4f}".format(ade, fde))
+        if args.saveCoordinates is not None:
+            saveCoordinates = args.saveCoordinates
+        elif "saveCoordinates" in data:
+            saveCoordinates = data["saveCoordinates"]
 
         if saveCoordinates:
-            coordinates_predicted = np.array(coordinates_predicted)
-            coordinates_gt = np.array(coordinates_gt)
-            saveCoords(
-                coordinates_predicted,
-                coordinates_gt,
-                peds_in_sequence,
-                data["predLen"],
-                coordinates_path,
+            coordinates_path = os.path.join("coordinates", data["name"])
+            if not os.path.exists("coordinates"):
+                os.makedirs("coordinates")
+
+        logging.info("Loading the test datasets...")
+        test_loader = utils.DataLoader(
+            data["dataPath"],
+            data["testDatasets"],
+            delimiter=data["delimiter"],
+            skip=data["skip"],
+            max_num_ped=data["maxNumPed"],
+            trajectory_size=trajectory_size,
+            batch_size=data["batchSize"],
+        )
+
+        logging.info("Creating the test dataset pipeline...")
+        dataset = utils.TrajectoriesDataset(
+            test_loader,
+            val_loader=None,
+            batch=False,
+            batch_size=data["batchSize"],
+            prefetch_size=data["prefetchSize"],
+        )
+
+        logging.info("Creating the helper for the coordinates")
+        helper = sample_helper(data["obsLen"])
+
+        pooling_module = None
+        if data["poolingModule"] == "social":
+            logging.info("Creating the {} pooling".format(data["poolingModule"]))
+            pooling_class = SocialPooling(
+                grid_size=data["gridSize"],
+                neighborhood_size=data["neighborhoodSize"],
+                max_num_ped=data["maxNumPed"],
+                embedding_size=data["embeddingSize"],
+                rnn_size=data["lstmSize"],
             )
+            pooling_module = pooling_class.pooling
+
+        logging.info("Creating the model...")
+        start = time.time()
+        model = SocialModel(
+            dataset,
+            helper,
+            social_sample_position_estimate,
+            social_loss_function,
+            pooling_module,
+            lstm_size=data["lstmSize"],
+            max_num_ped=data["maxNumPed"],
+            trajectory_size=trajectory_size,
+            embedding_size=data["embeddingSize"],
+            learning_rate=data["learningRate"],
+            dropout=data["dropout"],
+        )
+        end = time.time() - start
+        logging.debug("Model created in {:.2f}s".format(end))
+
+        # Define the path to the file that contains the variables of the model
+        data["modelFolder"] = os.path.join(data["modelFolder"], data["name"])
+        model_path = os.path.join(data["modelFolder"], data["name"])
+
+        # Create a saver
+        saver = tf.train.Saver()
+
+        # Add to the computation graph the evaluation functions
+        ade_sequence = utils.average_displacement_error(
+            model.new_coordinates[-data["predLen"] :],
+            model.input_data[:, -data["predLen"] :],
+            model.num_peds_frame,
+        )
+
+        fde_sequence = utils.final_displacement_error(
+            model.new_coordinates[-1], model.input_data[:, -1], model.num_peds_frame
+        )
+
+        ade = 0
+        fde = 0
+        coordinates_predicted = []
+        coordinates_gt = []
+        peds_in_sequence = []
+
+        # ============================ START SAMPLING ============================
+
+        with tf.Session() as sess:
+            # Restore the model trained
+            saver.restore(sess, model_path)
+
+            # Initialize the iterator of the sample dataset
+            sess.run(dataset.init_train)
+
+            logging.info(
+                "\n"
+                + "--------------------------------------------------------------------------------\n"
+                + "|                                Start sampling                                |\n"
+                + "--------------------------------------------------------------------------------\n"
+            )
+
+            for seq in range(test_loader.num_sequences):
+                logging.info(
+                    "Sample trajectory number {}/{}".format(
+                        seq + 1, test_loader.num_sequences
+                    )
+                )
+
+                ade_value, fde_value, coordinates_pred_value, coordinates_gt_value, num_peds = sess.run(
+                    [
+                        ade_sequence,
+                        fde_sequence,
+                        model.new_coordinates,
+                        model.input_data,
+                        model.num_peds_frame,
+                    ]
+                )
+                ade += ade_value
+                fde += fde_value
+                coordinates_predicted.append(coordinates_pred_value)
+                coordinates_gt.append(coordinates_gt_value)
+                peds_in_sequence.append(num_peds)
+
+            ade = ade / test_loader.num_sequences
+            fde = fde / test_loader.num_sequences
+            logging.info("Sampling finished. ADE: {:.4f} FDE: {:.4f}".format(ade, fde))
+            results.append_row([data["name"], ade, fde])
+
+            if saveCoordinates:
+                coordinates_predicted = np.array(coordinates_predicted)
+                coordinates_gt = np.array(coordinates_gt)
+                saveCoords(
+                    coordinates_predicted,
+                    coordinates_gt,
+                    peds_in_sequence,
+                    data["predLen"],
+                    coordinates_path,
+                )
+        tf.reset_default_graph()
+    logging.info("\n{}".format(results))
 
 
 def saveCoords(pred, coordinates_gt, peds_in_sequence, pred_len, coordinates_path):
