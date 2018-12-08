@@ -15,6 +15,7 @@ class SocialModel:
         pooling_module=None,
         lstm_size=128,
         max_num_ped=100,
+        prediction_time=8,
         trajectory_size=20,
         embedding_size=64,
         learning_rate=0.003,
@@ -139,10 +140,13 @@ class SocialModel:
             cond = lambda i, loss: tf.less(i, self.num_peds_frame)
 
             def body(i, loss):
-                loss = tf.add(loss, loss_function(self.new_coordinates[:, i]))
+                loss = tf.add(
+                    loss, loss_function(self.new_coordinates[-prediction_time:, i])
+                )
                 return tf.add(i, 1), loss
 
             _, self.loss = tf.while_loop(cond, body, [index, loss])
+            self.loss = tf.div(self.loss, tf.cast(self.num_peds_frame, tf.float32))
 
         # Define the RMSProp optimizer
         optimizer = tf.train.RMSPropOptimizer(learning_rate)
