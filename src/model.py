@@ -72,21 +72,19 @@ class SocialModel:
                 self.cell_states = self.cell.zero_state(max_num_ped, tf.float32)
 
         # Define the layer with ReLu used for processing the coordinates
-        with tf.variable_scope("Coordinates"):
-            self.coordinates_layer = tf.layers.Dense(
-                embedding_size,
-                activation=tf.nn.relu,
-                kernel_initializer=tf.contrib.layers.xavier_initializer(),
-                name="Layer",
-            )
+        self.coordinates_layer = tf.layers.Dense(
+            embedding_size,
+            activation=tf.nn.relu,
+            kernel_initializer=tf.contrib.layers.xavier_initializer(),
+            name="Coordinates/Layer",
+        )
 
         # Define the layer with ReLu used as output_layer for the decoder
-        with tf.variable_scope("Position_Estimation"):
-            self.output_layer = tf.layers.Dense(
-                output_size,
-                kernel_initializer=tf.contrib.layers.xavier_initializer(),
-                name="Layer",
-            )
+        self.output_layer = tf.layers.Dense(
+            output_size,
+            kernel_initializer=tf.contrib.layers.xavier_initializer(),
+            name="Position_estimation/Layer",
+        )
 
         # Define the SocialTrajectoryDecoder.
         decoder = trajectory_decoders.SocialDecoder(

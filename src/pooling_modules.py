@@ -31,12 +31,12 @@ class SocialPooling:
                 trainable=False,
                 name="grid",
             )
-            self.pooling_layer = tf.layers.Dense(
-                embedding_size,
-                activation=tf.nn.relu,
-                kernel_initializer=tf.contrib.layers.xavier_initializer(),
-                name="Layer",
-            )
+        self.pooling_layer = tf.layers.Dense(
+            embedding_size,
+            activation=tf.nn.relu,
+            kernel_initializer=tf.contrib.layers.xavier_initializer(),
+            name="Social_pooling/Layer",
+        )
 
     def pooling(self, coordinates, states, peds_mask):
         """Compute the social pooling.
