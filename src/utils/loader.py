@@ -167,7 +167,12 @@ class DataLoader:
                 for ped in peds:
                     # Get the frames where ped appear
                     frames = sequence[sequence[:, 1] == ped, :]
-                    if frames.shape[0] == self.trajectory_size:
+                    # Check that the pedestrian is not standing all time
+                    if (
+                        frames.shape[0] == self.trajectory_size
+                        and not np.all(frames[:, 2] == frames[0, 2])
+                        and not np.all(frames[:, 3] == frames[0, 3])
+                    ):
                         traj_frame.append(frames)
                 # If no trajectory is long enough traj_frame is empty
                 if traj_frame:
