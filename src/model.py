@@ -51,8 +51,6 @@ class SocialModel:
         # In training phase the list contains the values to minimize. In
         # sampling phase it has the coordinates predicted
         self.new_coordinates = []
-        # List that conatains the ground truth coordinates preprocessed
-        self.coordinates_preprocessed = []
         # The predicted coordinates processed by the linear layer in sampling
         # phase
         new_coordinates_processed = None
@@ -95,23 +93,20 @@ class SocialModel:
             output_layer=self.output_layer,
         )
 
-        # Processing the coordinates
-        with tf.variable_scope("Coordinates_preprocessing"):
-            for ped in range(max_num_ped):
-                self.coordinates_preprocessed.append(
-                    self.coordinates_layer(self.input_data[ped])
-                )
-            self.coordinates_preprocessed = tf.stack(self.coordinates_preprocessed)
-
         # Decode the coordinates
         for frame in range(trajectory_size - 1):
+            # Processing the coordinates
+            self.coordinates_preprocessed = self.coordinates_layer(
+                self.input_data[:, frame]
+            )
+
             # Initialize the decoder passing the real coordinates, the
             # coordinates that the model has predicted and the states of the
             # LSTMs. Which coordinates the model will use will be decided by the
             # helper function
             decoder.initialize(
                 frame,
-                self.coordinates_preprocessed[:, frame],
+                self.coordinates_preprocessed,
                 new_coordinates_processed,
                 self.cell_states,
                 hidden_states=cell_output,
