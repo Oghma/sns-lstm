@@ -20,6 +20,7 @@ class SocialModel:
         embedding_size=64,
         learning_rate=0.003,
         dropout=0.75,
+        clip_norm=5,
     ):
         """Constructor of the SocialModel class.
 
@@ -37,6 +38,7 @@ class SocialModel:
             layers.
           learning_rate: float. Learning rate.
           dropout: float. Dropout probability.
+          clip_norm int. clip norm
 
         """
         # Create the tensor for input_data of shape
@@ -150,4 +152,6 @@ class SocialModel:
 
         # Define the RMSProp optimizer
         optimizer = tf.train.RMSPropOptimizer(learning_rate)
-        self.trainOp = optimizer.minimize(self.loss)
+        gradients, variables = zip(*optimizer.compute_gradients(self.loss))
+        clipped, _ = tf.clip_by_global_norm(gradients, clip_norm)
+        self.trainOp = optimizer.apply_gradients(zip(clipped, variables))

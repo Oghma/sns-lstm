@@ -72,6 +72,8 @@ learningRate: 0.003
 dropout: 0.75
 # Type of pooling module to use. Two option supported: social or null
 poolingModule: "social"
+# Clip norm
+clipNorm: 5
 
 # -----------------------------------------------------------------------------
 #                                Logger settings                              |

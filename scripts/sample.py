@@ -187,6 +187,7 @@ def main():
             embedding_size=data["embeddingSize"],
             learning_rate=data["learningRate"],
             dropout=data["dropout"],
+            clip_norm=data["clipNorm"],
         )
         end = time.time() - start
         logging.debug("Model created in {:.2f}s".format(end))
