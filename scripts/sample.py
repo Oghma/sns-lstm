@@ -73,22 +73,23 @@ def main():
         help="Path to the file or folder with the parameters of the experiments",
     )
     parser.add_argument(
-        "-logL",
+        "-l",
         "--logLevel",
         help="logging level of the logger. Default is INFO",
         metavar="level",
         type=str,
     )
     parser.add_argument(
-        "-logF",
+        "-f",
         "--logFolder",
         help="path to the folder where to save the logs. If None, logs are only printed in stderr",
+        metavar="path",
         type=str,
     )
     parser.add_argument(
-        "-saveC",
-        "--saveCoordinates",
-        help="Flag for save the predicted and ground truth coordinates",
+        "-ns",
+        "--noSaveCoordinates",
+        help="Flag to not save the predicted and ground truth coordinates",
         action="store_true",
     )
     args = parser.parse_args()
@@ -127,8 +128,8 @@ def main():
         trajectory_size = data["obsLen"] + data["predLen"]
         saveCoordinates = False
 
-        if args.saveCoordinates is not None:
-            saveCoordinates = args.saveCoordinates
+        if args.noSaveCoordinates is True:
+            saveCoordinates = False
         elif "saveCoordinates" in data:
             saveCoordinates = data["saveCoordinates"]
 

@@ -68,17 +68,18 @@ def main():
         help="Path to the file or folder with the parameters of the experiments",
     )
     parser.add_argument(
-        "-logL",
+        "-l",
         "--logLevel",
         help="logging level of the logger. Default is INFO",
         metavar="level",
         type=str,
     )
     parser.add_argument(
-        "-logF",
+        "-f",
         "--logFolder",
         help="path to the folder where to save the logs. If None, logs are only printed in stderr",
         type=str,
+        metavar="path",
     )
     args = parser.parse_args()
 
