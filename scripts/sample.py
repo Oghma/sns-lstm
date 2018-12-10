@@ -146,7 +146,6 @@ def main():
             skip=data["skip"],
             max_num_ped=data["maxNumPed"],
             trajectory_size=trajectory_size,
-            batch_size=data["batchSize"],
         )
 
         logging.info("Creating the test dataset pipeline...")
@@ -154,7 +153,6 @@ def main():
             test_loader,
             val_loader=None,
             batch=False,
-            batch_size=data["batchSize"],
             prefetch_size=data["prefetchSize"],
         )
 

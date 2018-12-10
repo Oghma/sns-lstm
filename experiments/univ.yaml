@@ -7,8 +7,6 @@ name: "univ"
 
 # Buffer size of the tf.data.Dataset.prefetch option
 prefetchSize: 100
-# How many sequences to use in each minibatch
-batchSize: 10
 # Number of epochs
 epochs: 50
 

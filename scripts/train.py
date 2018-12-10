@@ -120,7 +120,6 @@ def main():
             skip=data["skip"],
             max_num_ped=data["maxNumPed"],
             trajectory_size=trajectory_size,
-            batch_size=data["batchSize"],
         )
         logging.info("Loading the validation datasets...")
         val_loader = utils.DataLoader(
@@ -130,7 +129,6 @@ def main():
             skip=data["skip"],
             max_num_ped=data["maxNumPed"],
             trajectory_size=trajectory_size,
-            batch_size=data["batchSize"],
         )
 
         logging.info("Creating the training and validation dataset pipeline...")
@@ -138,7 +136,6 @@ def main():
             train_loader,
             val_loader=val_loader,
             batch=False,
-            batch_size=data["batchSize"],
             prefetch_size=data["prefetchSize"],
         )
 
@@ -176,26 +173,6 @@ def main():
         end = time.time() - start
         logging.debug("Model created in {:.2f}s".format(end))
 
-        # Check if there are sequences outside the batches
-        train_last_batch = train_loader.num_sequences % train_loader.num_batches
-        val_last_batch = val_loader.num_sequences % val_loader.num_batches
-        train_num_batches = (
-            train_loader.num_batches + 1
-            if train_last_batch > 0
-            else train_loader.num_batches
-        )
-        val_num_batches = (
-            val_loader.num_batches + 1 if val_last_batch > 0 else val_loader.num_batches
-        )
-
-        # Print some info
-        logging.info(
-            "Number of batches per epoch in training set: {}".format(train_num_batches)
-        )
-        logging.info(
-            "Number of batches per epoch in validation set: {}".format(val_num_batches)
-        )
-
         # Define the path to where save the model and the checkpoints
         if "modelFolder" in data:
             save_model = True
@@ -230,41 +207,18 @@ def main():
                 # Initialize the iterator of the training dataset
                 sess.run(dataset.init_train)
 
-                for batch in range(train_loader.num_batches):
+                for sequence in range(train_loader.num_sequences):
                     start = time.time()
-                    loss_batch = 0
-                    for _ in range(train_loader.batch_size):
-                        loss, _ = sess.run([model.loss, model.trainOp])
-                        loss_batch += loss
+                    loss, _ = sess.run([model.loss, model.trainOp])
                     end = time.time() - start
-                    mean_batch = loss_batch / train_loader.batch_size
 
                     logging.info(
-                        "{}/{} epoch: {} time/Batch = {:.2f}s Total loss = {:.4f} Mean loss = {:.4f}".format(
-                            batch + 1,
-                            train_num_batches,
+                        "{}/{} epoch: {} time/Batch = {:.2f}s. Loss = {:.4f}".format(
+                            sequence + 1,
+                            train_loader.num_sequences,
                             epoch + 1,
                             end,
-                            loss_batch,
-                            mean_batch,
-                        )
-                    )
-
-                if train_last_batch > 0:
-                    loss_batch = 0
-                    for _ in range(train_last_batch):
-                        loss, _ = sess.run([model.loss, model.trainOp])
-                        loss_batch += loss
-                    mean_batch = loss_batch / train_last_batch
-
-                    logging.info(
-                        "{}/{} epoch: {} time/Batch = {:.2f}s Total loss = {:.4f} Mean = {:.4f}".format(
-                            train_num_batches,
-                            train_num_batches,
-                            epoch + 1,
-                            end,
-                            loss_batch,
-                            mean_batch,
+                            loss,
                         )
                     )
 
@@ -275,21 +229,14 @@ def main():
                 sess.run(dataset.init_val)
                 loss_val = 0
 
-                for batch in range(val_loader.num_batches):
-                    for _ in range(val_loader.batch_size):
-                        loss = sess.run(model.loss)
-                        loss_val += loss
-
-                for _ in range(val_last_batch):
+                for _ in range(val_loader.num_sequences):
                     loss = sess.run(model.loss)
                     loss_val += loss
 
-                mean_val = loss_val / (val_loader.batch_size * val_num_batches)
+                mean_val = loss_val / val_loader.num_sequences
 
                 logging.info(
-                    "Epoch: {} Validation loss = {:.4f} Mean = {:.4f}".format(
-                        epoch + 1, loss_val, mean_val
-                    )
+                    "Epoch: {}. Validation loss = {:.4f}".format(epoch + 1, mean_val)
                 )
 
                 # Save the model
@@ -298,7 +245,7 @@ def main():
                     saver.save(
                         sess,
                         checkpoints_path,
-                        global_step=epoch,
+                        global_step=epoch + 1,
                         write_meta_graph=False,
                     )
                     logging.info("Model saved...")
