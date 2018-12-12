@@ -13,7 +13,7 @@ from model import SocialModel
 from coordinates_helpers import sample_helper
 from losses import social_loss_function
 from position_estimates import social_sample_position_estimate
-from pooling_modules import SocialPooling
+from pooling_layers import SocialPooling
 from beautifultable import BeautifulTable
 
 

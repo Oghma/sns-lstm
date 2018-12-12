@@ -12,7 +12,7 @@ from model import SocialModel
 from coordinates_helpers import train_helper
 from losses import social_loss_function
 from position_estimates import social_train_position_estimate
-from pooling_modules import SocialPooling
+from pooling_layers import SocialPooling
 
 
 def logger(data, args):
