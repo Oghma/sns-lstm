@@ -8,11 +8,11 @@ import argparse
 import tensorflow as tf
 
 import utils
+import pooling_layers
 from model import SocialModel
 from coordinates_helpers import train_helper
 from losses import social_loss_function
 from position_estimates import social_train_position_estimate
-from pooling_layers import SocialPooling
 
 
 def logger(data, args):
@@ -145,7 +145,17 @@ def main():
         pooling_module = None
         if data["poolingModule"] == "social":
             logging.info("Creating the {} pooling".format(data["poolingModule"]))
-            pooling_class = SocialPooling(
+            pooling_class = pooling_layers.SocialPooling(
+                grid_size=data["gridSize"],
+                neighborhood_size=data["neighborhoodSize"],
+                max_num_ped=data["maxNumPed"],
+                embedding_size=data["embeddingSize"],
+                rnn_size=data["lstmSize"],
+            )
+            pooling_module = pooling_class.pooling
+        elif data["poolingModule"] == "occupancy":
+            logging.info("Creating the {} pooling".format(data["poolingModule"]))
+            pooling_class = pooling_layers.OccupancyPooling(
                 grid_size=data["gridSize"],
                 neighborhood_size=data["neighborhoodSize"],
                 max_num_ped=data["maxNumPed"],
