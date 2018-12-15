@@ -21,6 +21,8 @@ class SocialModel:
         learning_rate=0.003,
         dropout=0.75,
         clip_norm=5,
+        opt_momentum=0.2,
+        opt_decay=0.95,
         lr_steps=3000,
         lr_decay=0.95,
     ):
@@ -162,7 +164,10 @@ class SocialModel:
         )
 
         # Define the RMSProp optimizer
-        optimizer = tf.train.RMSPropOptimizer(learning_rate)
+        optimizer = tf.train.RMSPropOptimizer(
+            learning_rate, decay=opt_decay, momentum=opt_momentum, centered=True
+        )
+        # Global norm clipping
         gradients, variables = zip(*optimizer.compute_gradients(self.loss))
         clipped, _ = tf.clip_by_global_norm(gradients, clip_norm)
         self.trainOp = optimizer.apply_gradients(
