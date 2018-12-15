@@ -167,7 +167,12 @@ def main():
             trajectory_size=trajectory_size,
             embedding_size=data["embeddingSize"],
             learning_rate=data["learningRate"],
-            clip_norm=data["clipNorm"],
+            clip_norm=data["clippingRatio"],
+            l2_norm=data["l2Rate"],
+            opt_momentum=data["optimizerMomentum"],
+            opt_decay=data["optimizerDecay"],
+            lr_steps=train_loader.num_sequences,
+            lr_decay=data["learningRateDecay"],
         )
         end = time.time() - start
         logging.debug("Model created in {:.2f}s".format(end))
