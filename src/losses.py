@@ -15,4 +15,4 @@ def social_loss_function(coordinates):
     # For numerical stability
     epsilon = 1e-20
 
-    return -tf.reduce_sum(tf.log(tf.maximum(coordinates, epsilon)))
+    return -tf.reduce_sum(tf.log(coordinates + epsilon))
