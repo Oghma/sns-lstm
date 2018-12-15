@@ -64,7 +64,7 @@ class SocialModel:
         output_size = 5
 
         # Define the LSTM with dimension lstm_size
-        with tf.name_scope("LSTM"):
+        with tf.variable_scope("LSTM"):
             self.cell = tf.nn.rnn_cell.LSTMCell(lstm_size, name="Cell")
 
             # Define the states of the LSTMs. zero_state returns a tensor of
