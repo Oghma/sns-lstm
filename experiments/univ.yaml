@@ -65,8 +65,6 @@ lstmSize: 128
 embeddingSize: 64
 # Learning rate
 learningRate: 0.003
-# Dropout probability
-dropout: 0.75
 # Type of pooling module to use. Two option supported: social or null
 poolingModule: "social"
 # Clip norm

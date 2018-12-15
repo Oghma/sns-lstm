@@ -19,7 +19,6 @@ class SocialModel:
         trajectory_size=20,
         embedding_size=64,
         learning_rate=0.003,
-        dropout=0.75,
         clip_norm=5,
         l2_norm=0.001,
         opt_momentum=0.2,

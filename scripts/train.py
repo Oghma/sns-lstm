@@ -167,7 +167,6 @@ def main():
             trajectory_size=trajectory_size,
             embedding_size=data["embeddingSize"],
             learning_rate=data["learningRate"],
-            dropout=data["dropout"],
             clip_norm=data["clipNorm"],
         )
         end = time.time() - start
