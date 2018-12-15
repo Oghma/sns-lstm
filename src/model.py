@@ -21,6 +21,8 @@ class SocialModel:
         learning_rate=0.003,
         dropout=0.75,
         clip_norm=5,
+        lr_steps=3000,
+        lr_decay=0.95,
     ):
         """Constructor of the SocialModel class.
 
@@ -62,6 +64,10 @@ class SocialModel:
 
         # Output size
         output_size = 5
+
+        # Counter for the adaptive learning rate. Counts the number of batch
+        # processed.
+        global_step = tf.Variable(0, trainable=False)
 
         # Define the LSTM with dimension lstm_size
         with tf.variable_scope("LSTM"):
@@ -150,8 +156,15 @@ class SocialModel:
             _, self.loss = tf.while_loop(cond, body, [index, loss])
             self.loss = tf.div(self.loss, tf.cast(self.num_peds_frame, tf.float32))
 
+        # Step epoch learning rate decay
+        learning_rate = tf.train.exponential_decay(
+            learning_rate, global_step, lr_steps, lr_decay
+        )
+
         # Define the RMSProp optimizer
         optimizer = tf.train.RMSPropOptimizer(learning_rate)
         gradients, variables = zip(*optimizer.compute_gradients(self.loss))
         clipped, _ = tf.clip_by_global_norm(gradients, clip_norm)
-        self.trainOp = optimizer.apply_gradients(zip(clipped, variables))
+        self.trainOp = optimizer.apply_gradients(
+            zip(clipped, variables), global_step=global_step
+        )
