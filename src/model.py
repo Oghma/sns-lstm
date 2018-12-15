@@ -21,6 +21,7 @@ class SocialModel:
         learning_rate=0.003,
         dropout=0.75,
         clip_norm=5,
+        l2_norm=0.001,
         opt_momentum=0.2,
         opt_decay=0.95,
         lr_steps=3000,
@@ -157,6 +158,14 @@ class SocialModel:
 
             _, self.loss = tf.while_loop(cond, body, [index, loss])
             self.loss = tf.div(self.loss, tf.cast(self.num_peds_frame, tf.float32))
+
+        # Add weights regularization
+        tvars = tf.trainable_variables()
+        l2_loss = (
+            tf.add_n([tf.nn.l2_loss(v) for v in tvars if "bias" not in v.name])
+            * l2_norm
+        )
+        self.loss = self.loss + l2_loss
 
         # Step epoch learning rate decay
         learning_rate = tf.train.exponential_decay(
