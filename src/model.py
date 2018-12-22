@@ -153,18 +153,9 @@ class SocialModel:
         self.new_coordinates = tf.stack(self.new_coordinates)
 
         with tf.variable_scope("Calculate_loss"):
-            index = tf.constant(0, name="index")
-            loss = tf.constant(0, tf.float32, name="loss")
-
-            cond = lambda i, loss: tf.less(i, self.num_peds_frame)
-
-            def body(i, loss):
-                loss = tf.add(
-                    loss, loss_function(self.new_coordinates[-prediction_time:, i])
-                )
-                return tf.add(i, 1), loss
-
-            _, self.loss = tf.while_loop(cond, body, [index, loss])
+            self.loss = loss_function(
+                self.new_coordinates[-prediction_time:, : self.num_peds_frame]
+            )
             self.loss = tf.div(self.loss, tf.cast(self.num_peds_frame, tf.float32))
 
         # Add weights regularization
