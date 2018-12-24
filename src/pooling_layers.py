@@ -36,10 +36,11 @@ class Pooling(ABC):
         )
 
     @abstractmethod
-    def pooling(self, coordinates, states, peds_mask):
+    def pooling(self, pedestrians, coordinates, states, peds_mask, *args):
         """Compute the pooling.
 
         Args:
+          pedestrians: tensor of shape [max_num_ped, 2]. Pedestrians.
           coordinates: tensor of shape [max_num_ped, 2]. Coordinates.
           states: tensor of shape [max_num_ped, rnn_size]. Cell states of the
             LSTM.
@@ -153,10 +154,11 @@ class SocialPooling(Pooling):
                 name="grid",
             )
 
-    def pooling(self, coordinates, states, peds_mask):
+    def pooling(self, pedestrians, coordinates, states, peds_mask, *args):
         """Compute the social pooling.
 
         Args:
+          pedestrians: tensor of shape [max_num_ped, 2]. Pedestrians.
           coordinates: tensor of shape [max_num_ped, 2]. Coordinates.
           states: tensor of shape [max_num_ped, rnn_size]. Cell states of the
             LSTM.
@@ -166,7 +168,7 @@ class SocialPooling(Pooling):
           The social pooling layer
 
         """
-        top_left, bottom_right = self._get_bounds(coordinates)
+        top_left, bottom_right = self._get_bounds(pedestrians)
 
         # Repeat the coordinates in order to have P1, P2, P3, P1, P2, P3
         coordinates = tf.tile(coordinates, (self.max_num_ped, 1))
@@ -248,10 +250,11 @@ class OccupancyPooling(Pooling):
             )
             self.updates = tf.ones([max_num_ped * max_num_ped, 1], name="updates")
 
-    def pooling(self, coordinates, states, peds_mask):
+    def pooling(self, pedestrians, coordinates, states, peds_mask, *args):
         """Compute the occupancy pooling.
 
         Args:
+          pedestrians: tensor of shape [max_num_ped, 2]. Pedestrians.
           coordinates: tensor of shape [max_num_ped, 2]. Coordinates.
           states: tensor of shape [max_num_ped, rnn_size]. Cell states of the
             LSTM.
@@ -261,7 +264,7 @@ class OccupancyPooling(Pooling):
           The social pooling layer
 
         """
-        top_left, bottom_right = self._get_bounds(coordinates)
+        top_left, bottom_right = self._get_bounds(pedestrians)
 
         # Repeat the coordinates in order to have P1, P2, P3, P1, P2, P3
         coordinates = tf.tile(coordinates, (self.max_num_ped, 1))
@@ -302,3 +305,88 @@ class OccupancyPooling(Pooling):
             )
 
         return self.pooling_layer(scattered)
+
+
+class CombinedPooling:
+    """Combined pooling class. Define multiple pooling layer combined with each
+    other."""
+
+    def __init__(
+        self,
+        layers,
+        all_peds=False,
+        grid_size=8,
+        neighborhood_size=4,
+        max_num_ped=100,
+        embedding_size=64,
+        rnn_size=128,
+    ):
+        """Constructor of the CombinedPooling class.
+
+        Args:
+          layers: list of string. The pooling layers to build.
+          all_peds: boolean. If True, use the all_peds tensors for all the
+            pooling layers.
+          grid_size: int or float.
+          neighboorhood_size: int or float.
+          max_num_ped: int. Maximum number of pedestrian in a single frame.
+          embedding_size int. Dimension of the output space of the embedding
+            layers.
+          rnn_size: int. The number of units in the LSTM cell.
+
+        """
+        self.__layers = []
+        self.__all_peds_layers = []
+
+        for layer in layers:
+            if layer == "social":
+                social = SocialPooling(
+                    grid_size=grid_size,
+                    neighborhood_size=neighborhood_size,
+                    max_num_ped=max_num_ped,
+                    embedding_size=embedding_size,
+                    rnn_size=rnn_size,
+                )
+                if all_peds:
+                    self.__all_peds_layers.append(social)
+                else:
+                    self.__layers.append(social)
+            elif layer == "occupancy":
+                self.__all_peds_layers.append(
+                    OccupancyPooling(
+                        grid_size=grid_size,
+                        neighborhood_size=neighborhood_size,
+                        max_num_ped=max_num_ped,
+                        embedding_size=embedding_size,
+                        rnn_size=rnn_size,
+                    )
+                )
+
+    def pooling(
+        self, pedestrians, coordinates, states, peds_mask, all_peds, all_peds_mask
+    ):
+        """Compute the combined pooling.
+
+        Args:
+
+          coordinates: tensor of shape [max_num_ped, 2]. Coordinates.
+          states: tensor of shape [max_num_ped, rnn_size]. Cell states of the
+            LSTM.
+          peds_mask: tensor of shape [max_num_ped, max_num_ped]. Grid layer.
+          all_peds: tensor of shape [max_num_ped, embedding_size]. Coordinates
+            of all pedestrians.
+          all_peds_mask: tensor of shape [max_num_ped, max_num_ped]. Mask of all
+            pedestrians.
+
+        Returns:
+          The pooling layer
+
+        """
+        pooled = []
+        for layer in self.__layers:
+            pooled.append(layer.pooling(pedestrians, coordinates, states, peds_mask))
+
+        for layer in self.__all_peds_layers:
+            pooled.append(layer.pooling(pedestrians, all_peds, states, all_peds_mask))
+
+        return tf.concat(pooled, 1)

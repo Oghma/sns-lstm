@@ -76,8 +76,10 @@ class SocialDecoder:
         input_pass_gt,
         input_pass,
         cell_states,
+        all_peds,
         hidden_states=None,
         peds_mask=None,
+        all_peds_mask=None,
     ):
         """Store the variables needed for computing one pass of decoding.
 
@@ -97,5 +99,10 @@ class SocialDecoder:
 
         if self.__pooling_module is not None:
             self.__pooling = self.__pooling_module(
-                self.__input_pass, self.__hidden_states, self.__peds_mask
+                self.__input_pass,
+                self.__input_pass,
+                self.__hidden_states,
+                self.__peds_mask,
+                all_peds,
+                all_peds_mask,
             )
