@@ -53,6 +53,12 @@ class SocialModel:
         self.peds_mask = dataset.tensors[1]
         # Create the tensor for num_peds_frame
         self.num_peds_frame = dataset.tensors[2]
+        # Create the tensor for all pedestrians of shape
+        # [max_num_ped, trajectory_size,2]
+        self.all_peds = dataset.tensors[3]
+        # Create the for the ped mask of shape
+        # [max_num_ped, max_num_ped, trajectory_size]
+        self.all_peds_mask = dataset.tensors[4]
 
         # Store the parameters
         # In training phase the list contains the values to minimize. In
@@ -110,6 +116,7 @@ class SocialModel:
             self.coordinates_preprocessed = self.coordinates_layer(
                 self.input_data[:, frame]
             )
+            all_peds_preprocessed = self.coordinates_layer(self.all_peds[:, frame])
 
             # Initialize the decoder passing the real coordinates, the
             # coordinates that the model has predicted and the states of the
@@ -120,8 +127,10 @@ class SocialModel:
                 self.coordinates_preprocessed,
                 new_coordinates_processed,
                 self.cell_states,
+                all_peds_preprocessed,
                 hidden_states=cell_output,
                 peds_mask=self.peds_mask[:, :, frame],
+                all_peds_mask=self.all_peds_mask[:, :, frame],
             )
             # compute_pass returns a tuple of two tensors. cell_output are the
             # output of the self.cell with shape [max_num_ped , output_size] and
