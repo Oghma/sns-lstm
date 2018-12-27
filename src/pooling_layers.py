@@ -1,0 +1,392 @@
+"""Module that defines the pooling modules."""
+from abc import ABC, abstractmethod
+import tensorflow as tf
+
+
+class Pooling(ABC):
+    """Abstract pooling class. Define the interface for the pooling layers."""
+
+    def __init__(
+        self,
+        grid_size=8,
+        neighborhood_size=4,
+        max_num_ped=100,
+        embedding_size=64,
+        rnn_size=128,
+    ):
+        """Constructor of the Pooling class.
+
+        Args:
+          grid_size: int or float.
+          neighboorhood_size: int or float.
+          max_num_ped: int. Maximum number of pedestrian in a single frame.
+          embedding_size int. Dimension of the output space of the embedding
+            layers.
+          rnn_size: int. The number of units in the LSTM cell.
+        """
+        self.grid_size = grid_size
+        self.neighborhood_size = neighborhood_size
+        self.max_num_ped = max_num_ped
+
+        self.pooling_layer = tf.layers.Dense(
+            embedding_size,
+            activation=tf.nn.relu,
+            kernel_initializer=tf.contrib.layers.xavier_initializer(),
+            name="Pooling/Layer",
+        )
+
+    @abstractmethod
+    def pooling(self, pedestrians, coordinates, states, peds_mask, *args):
+        """Compute the pooling.
+
+        Args:
+          pedestrians: tensor of shape [max_num_ped, 2]. Pedestrians.
+          coordinates: tensor of shape [max_num_ped, 2]. Coordinates.
+          states: tensor of shape [max_num_ped, rnn_size]. Cell states of the
+            LSTM.
+          peds_mask: tensor of shape [max_num_ped, max_num_ped]. Grid layer.
+
+        Returns:
+          The pooling layer
+
+        """
+        pass
+
+    def _get_bounds(self, coordinates):
+        """Calculates the bounds of each pedestrian.
+
+        Args:
+          coordinates: tensor of shape [max_num_ped, 2]. Coordinates
+
+        Returns:
+          tuple containing tensor of shape [max_num_ped, 2] the top left and
+            bottom right bounds.
+
+        """
+        top_left_x = coordinates[:, 0] - (self.neighborhood_size / 2)
+        top_left_y = coordinates[:, 1] + (self.neighborhood_size / 2)
+        bottom_right_x = coordinates[:, 0] + (self.neighborhood_size / 2)
+        bottom_right_y = coordinates[:, 1] - (self.neighborhood_size / 2)
+
+        top_left = tf.stack([top_left_x, top_left_y], axis=1)
+        bottom_right = tf.stack([bottom_right_x, bottom_right_y], axis=1)
+
+        return top_left, bottom_right
+
+    def _grid_pos(self, top_left, coordinates):
+        """Calculate the position in the grid layer of the neighbours.
+
+        Args:
+          top_left: tensor of shape [max_num_ped * max_num_ped, 2]. Top left
+            bound.
+          coordinates: tensor of shape [max_num_ped * max_num_ped, 2].
+            Coordinates.
+
+        Returns:
+          Tensor of shape [max_num_ped * max_num_ped] that is the position in
+            the grid layer of the neighbours.
+
+        """
+        cell_x = (
+            tf.floor((coordinates[:, 0] - top_left[:, 0]) / self.neighborhood_size)
+            * self.grid_size
+        )
+        cell_y = (
+            tf.floor((top_left[:, 1] - coordinates[:, 1]) / self.neighborhood_size)
+            * self.grid_size
+        )
+        grid_pos = cell_x + cell_y * self.grid_size
+        return tf.cast(grid_pos, tf.int32)
+
+    def _repeat(self, tensor):
+        """ Repeat each row of the input tensor max_num_ped times
+
+        Args:
+          tensor: tensor of shape [max_num_ped, n]
+        Returns:
+          tensor of shape [max_num_ped * max_num_ped, n]. Repeat each row of the
+            input tensor in order to have row1, row1, row1, row2, row2, row2,
+            etc
+
+        """
+        col_len = tensor.shape[1]
+        tensor = tf.expand_dims(tensor, 1)
+        # Tensor has now shape [max_num_ped, 1, 2]. Now repeat ech row
+        tensor = tf.tile(tensor, (1, self.max_num_ped, 1))
+        tensor = tf.reshape(tensor, (-1, col_len))
+
+        return tensor
+
+
+class SocialPooling(Pooling):
+    """Implement the Social layer defined in social LSTM paper"""
+
+    def __init__(
+        self,
+        grid_size=8,
+        neighborhood_size=4,
+        max_num_ped=100,
+        embedding_size=64,
+        rnn_size=128,
+    ):
+        """Constructor of the SocialPooling class.
+
+        Args:
+          grid_size: int or float.
+          neighboorhood_size: int or float.
+          max_num_ped: int. Maximum number of pedestrian in a single frame.
+          embedding_size int. Dimension of the output space of the embedding
+            layers.
+          rnn_size: int. The number of units in the LSTM cell.
+        """
+        super().__init__(
+            grid_size=grid_size,
+            neighborhood_size=neighborhood_size,
+            max_num_ped=max_num_ped,
+            embedding_size=embedding_size,
+            rnn_size=rnn_size,
+        )
+
+        with tf.variable_scope("Social_Pooling"):
+            self.grid = tf.Variable(
+                tf.zeros([max_num_ped * grid_size * grid_size, rnn_size], tf.float32),
+                trainable=False,
+                name="grid",
+            )
+
+    def pooling(self, pedestrians, coordinates, states, peds_mask, *args):
+        """Compute the social pooling.
+
+        Args:
+          pedestrians: tensor of shape [max_num_ped, 2]. Pedestrians.
+          coordinates: tensor of shape [max_num_ped, 2]. Coordinates.
+          states: tensor of shape [max_num_ped, rnn_size]. Cell states of the
+            LSTM.
+          peds_mask: tensor of shape [max_num_ped, max_num_ped]. Grid layer.
+
+        Returns:
+          The social pooling layer
+
+        """
+        top_left, bottom_right = self._get_bounds(pedestrians)
+
+        # Repeat the coordinates in order to have P1, P2, P3, P1, P2, P3
+        coordinates = tf.tile(coordinates, (self.max_num_ped, 1))
+        # Repeat the hidden states in order to have S1, S2, S3, S1, S2, S3
+        states = tf.tile(states, (self.max_num_ped, 1))
+        # Repeat the bounds in order to have B1, B1, B1, B2, B2, B2
+        top_left = self._repeat(top_left)
+        bottom_right = self._repeat(bottom_right)
+
+        grid_layout = self._grid_pos(top_left, coordinates)
+
+        # Find which pedestrians are to include
+        x_bound = tf.logical_and(
+            (coordinates[:, 0] < bottom_right[:, 0]),
+            (coordinates[:, 0] > top_left[:, 0]),
+        )
+        y_bound = tf.logical_and(
+            (coordinates[:, 1] < top_left[:, 1]),
+            (coordinates[:, 1] > bottom_right[:, 1]),
+        )
+
+        peds_mask = tf.reshape(peds_mask, [self.max_num_ped * self.max_num_ped])
+        mask = tf.logical_and(tf.logical_and(x_bound, y_bound), peds_mask)
+
+        # tf.scatter_add works only with 1D tensors. The values in grid_layout
+        # are in [0, grid_size * grid_size]. It needs an offset
+        total_grid = self.grid_size * self.grid_size
+        offset = tf.range(0, total_grid * self.max_num_ped, total_grid)
+        offset = tf.reshape(self._repeat(tf.reshape(offset, [-1, 1])), [-1])
+        grid_layout = grid_layout + offset
+
+        with tf.control_dependencies([self.grid.initializer]):
+            scattered = tf.reshape(
+                tf.scatter_add(
+                    self.grid,
+                    tf.boolean_mask(grid_layout, mask),
+                    tf.boolean_mask(states, mask),
+                ),
+                (self.max_num_ped, -1),
+            )
+
+        return self.pooling_layer(scattered)
+
+
+class OccupancyPooling(Pooling):
+    """Implement the Occupancy layer defined in social LSTM paper"""
+
+    def __init__(
+        self,
+        grid_size=8,
+        neighborhood_size=4,
+        max_num_ped=100,
+        embedding_size=64,
+        rnn_size=128,
+    ):
+        """Constructor of the SocialPooling class.
+
+        Args:
+          grid_size: int or float.
+          neighboorhood_size: int or float.
+          max_num_ped: int. Maximum number of pedestrian in a single frame.
+          embedding_size int. Dimension of the output space of the embedding
+            layers.
+          rnn_size: int. The number of units in the LSTM cell.
+        """
+        super().__init__(
+            grid_size=grid_size,
+            neighborhood_size=neighborhood_size,
+            max_num_ped=max_num_ped,
+            embedding_size=embedding_size,
+            rnn_size=rnn_size,
+        )
+
+        with tf.variable_scope("Social_Pooling"):
+            self.grid = tf.Variable(
+                tf.zeros([max_num_ped * grid_size * grid_size, 1], tf.float32),
+                trainable=False,
+                name="grid",
+            )
+            self.updates = tf.ones([max_num_ped * max_num_ped, 1], name="updates")
+
+    def pooling(self, pedestrians, coordinates, states, peds_mask, *args):
+        """Compute the occupancy pooling.
+
+        Args:
+          pedestrians: tensor of shape [max_num_ped, 2]. Pedestrians.
+          coordinates: tensor of shape [max_num_ped, 2]. Coordinates.
+          states: tensor of shape [max_num_ped, rnn_size]. Cell states of the
+            LSTM.
+          peds_mask: tensor of shape [max_num_ped, max_num_ped]. Grid layer.
+
+        Returns:
+          The social pooling layer
+
+        """
+        top_left, bottom_right = self._get_bounds(pedestrians)
+
+        # Repeat the coordinates in order to have P1, P2, P3, P1, P2, P3
+        coordinates = tf.tile(coordinates, (self.max_num_ped, 1))
+        # Repeat the bounds in order to have B1, B1, B1, B2, B2, B2
+        top_left = self._repeat(top_left)
+        bottom_right = self._repeat(bottom_right)
+
+        grid_layout = self._grid_pos(top_left, coordinates)
+
+        # Find which pedestrians are to include
+        x_bound = tf.logical_and(
+            (coordinates[:, 0] < bottom_right[:, 0]),
+            (coordinates[:, 0] > top_left[:, 0]),
+        )
+        y_bound = tf.logical_and(
+            (coordinates[:, 1] < top_left[:, 1]),
+            (coordinates[:, 1] > bottom_right[:, 1]),
+        )
+
+        peds_mask = tf.reshape(peds_mask, [self.max_num_ped * self.max_num_ped])
+        mask = tf.logical_and(tf.logical_and(x_bound, y_bound), peds_mask)
+
+        # tf.scatter_add works only with 1D tensors. The values in grid_layout
+        # are in [0, grid_size * grid_size]. It needs an offset
+        total_grid = self.grid_size * self.grid_size
+        offset = tf.range(0, total_grid * self.max_num_ped, total_grid)
+        offset = tf.reshape(self._repeat(tf.reshape(offset, [-1, 1])), [-1])
+        grid_layout = grid_layout + offset
+
+        with tf.control_dependencies([self.grid.initializer]):
+            scattered = tf.reshape(
+                tf.scatter_add(
+                    self.grid,
+                    tf.boolean_mask(grid_layout, mask),
+                    tf.boolean_mask(self.updates, mask),
+                ),
+                (self.max_num_ped, -1),
+            )
+
+        return self.pooling_layer(scattered)
+
+
+class CombinedPooling:
+    """Combined pooling class. Define multiple pooling layer combined with each
+    other."""
+
+    def __init__(
+        self,
+        layers,
+        all_peds=False,
+        grid_size=8,
+        neighborhood_size=4,
+        max_num_ped=100,
+        embedding_size=64,
+        rnn_size=128,
+    ):
+        """Constructor of the CombinedPooling class.
+
+        Args:
+          layers: list of string. The pooling layers to build.
+          all_peds: boolean. If True, use the all_peds tensors for all the
+            pooling layers.
+          grid_size: int or float.
+          neighboorhood_size: int or float.
+          max_num_ped: int. Maximum number of pedestrian in a single frame.
+          embedding_size int. Dimension of the output space of the embedding
+            layers.
+          rnn_size: int. The number of units in the LSTM cell.
+
+        """
+        self.__layers = []
+        self.__all_peds_layers = []
+
+        for layer in layers:
+            if layer == "social":
+                social = SocialPooling(
+                    grid_size=grid_size,
+                    neighborhood_size=neighborhood_size,
+                    max_num_ped=max_num_ped,
+                    embedding_size=embedding_size,
+                    rnn_size=rnn_size,
+                )
+                if all_peds:
+                    self.__all_peds_layers.append(social)
+                else:
+                    self.__layers.append(social)
+            elif layer == "occupancy":
+                self.__all_peds_layers.append(
+                    OccupancyPooling(
+                        grid_size=grid_size,
+                        neighborhood_size=neighborhood_size,
+                        max_num_ped=max_num_ped,
+                        embedding_size=embedding_size,
+                        rnn_size=rnn_size,
+                    )
+                )
+
+    def pooling(
+        self, pedestrians, coordinates, states, peds_mask, all_peds, all_peds_mask
+    ):
+        """Compute the combined pooling.
+
+        Args:
+
+          coordinates: tensor of shape [max_num_ped, 2]. Coordinates.
+          states: tensor of shape [max_num_ped, rnn_size]. Cell states of the
+            LSTM.
+          peds_mask: tensor of shape [max_num_ped, max_num_ped]. Grid layer.
+          all_peds: tensor of shape [max_num_ped, embedding_size]. Coordinates
+            of all pedestrians.
+          all_peds_mask: tensor of shape [max_num_ped, max_num_ped]. Mask of all
+            pedestrians.
+
+        Returns:
+          The pooling layer
+
+        """
+        pooled = []
+        for layer in self.__layers:
+            pooled.append(layer.pooling(pedestrians, coordinates, states, peds_mask))
+
+        for layer in self.__all_peds_layers:
+            pooled.append(layer.pooling(pedestrians, all_peds, states, all_peds_mask))
+
+        return tf.concat(pooled, 1)
