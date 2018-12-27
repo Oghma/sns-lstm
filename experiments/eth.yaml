@@ -9,7 +9,8 @@ name: "eth"
 prefetchSize: 100
 # Number of epochs
 epochs: 50
-
+# Use centered option in RMSProp
+centered: true
 
 # -----------------------------------------------------------------------------
 #                             Dataset parameters                              |
