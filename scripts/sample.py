@@ -160,7 +160,20 @@ def main():
         helper = sample_helper(data["obsLen"])
 
         pooling_module = None
-        if data["poolingModule"] == "social":
+        if isinstance(data["poolingModule"], list):
+            logging.info(
+                "Creating the combined pooling: {}".format(data["poolingModule"])
+            )
+            pooling_class = pooling_layers.CombinedPooling(
+                data["poolingModule"],
+                grid_size=data["gridSize"],
+                neighborhood_size=data["neighborhoodSize"],
+                max_num_ped=data["maxNumPed"],
+                embedding_size=data["embeddingSize"],
+                rnn_size=data["lstmSize"],
+            )
+            pooling_module = pooling_class.pooling
+        elif data["poolingModule"] == "social":
             logging.info("Creating the {} pooling".format(data["poolingModule"]))
             pooling_class = pooling_layers.SocialPooling(
                 grid_size=data["gridSize"],
