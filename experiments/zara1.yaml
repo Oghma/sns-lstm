@@ -6,7 +6,7 @@ name: "zara1"
 # -----------------------------------------------------------------------------
 
 # Buffer size of the tf.data.Dataset.prefetch option
-prefetchSize: 100
+prefetchSize: 1000
 # Number of epochs
 epochs: 50
 # Use centered option in RMSProp
