@@ -11,7 +11,18 @@ prefetchSize: 100
 epochs: 50
 # Use centered option in RMSProp
 centered: true
-
+# Learning rate
+learningRate: 0.003
+# Learning rate decay
+learningRateDecay: 0.95
+# Clipping ratio
+clippingRatio: 5
+# Optimizer decay rate
+optimizerDecay: 0.95
+# Optimizer momentum rate
+optimizerMomentum: 0.2
+# Weight regularization rate
+l2Rate: 0.001
 
 # -----------------------------------------------------------------------------
 #                             Dataset parameters                              |
@@ -65,20 +76,8 @@ neighborhoodSize: 2
 lstmSize: 128
 # Dimension of the embedding layer 
 embeddingSize: 64
-# Learning rate
-learningRate: 0.003
-# Learning rate decay
-learningRateDecay: 0.95
 # Type of pooling module to use. Two option supported: social or null
 poolingModule: "social"
-# Clipping ratio
-clippingRatio: 5
-# Optimizer decay rate
-optimizerDecay: 0.95
-# Optimizer momentum rate
-optimizerMomentum: 0.2
-# Weight regularization rate
-l2Rate: 0.001
 
 # -----------------------------------------------------------------------------
 #                                Logger settings                              |
