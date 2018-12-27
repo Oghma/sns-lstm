@@ -2,7 +2,6 @@
 
 import os
 import time
-import yaml
 import logging
 import argparse
 import tensorflow as tf
@@ -15,8 +14,8 @@ from losses import social_loss_function
 from position_estimates import social_train_position_estimate
 
 
-def logger(data, args):
-    log_file = data["name"] + "-train.log"
+def logger(hparams, args):
+    log_file = hparams.name + "-train.log"
     log_folder = None
     level = "INFO"
     formatter = logging.Formatter(
@@ -26,8 +25,8 @@ def logger(data, args):
     # Check if you have to add a FileHandler
     if args.logFolder is not None:
         log_folder = args.logFolder
-    elif "logFolder" in data:
-        log_folder = data["logFolder"]
+    elif hparams.logFolder is not None:
+        log_folder = hparams.logFolder
 
     if log_folder is not None:
         log_file = os.path.join(log_folder, log_file)
@@ -37,13 +36,15 @@ def logger(data, args):
     # Set the level
     if args.logLevel is not None:
         level = args.logLevel.upper()
-    elif "logLevel" in data:
-        level = data["logLevel"].upper()
+    elif hparams.logLeve is not None:
+        level = hparams.logLevel.upper()
 
     # Get the logger
     logger = logging.getLogger()
     # Remove handlers added previously
     for handler in logger.handlers[:]:
+        if isinstance(handler, logging.FileHandler):
+            handler.close()
         logger.removeHandler(handler)
     if log_folder is not None:
         # Add a FileHandler
@@ -94,40 +95,39 @@ def main():
 
     for experiment in experiments:
         # Load the parameters
-        with open(experiment) as fp:
-            data = yaml.load(fp)
+        hparams = utils.YParams(experiment)
         # Define the logger
-        logger(data, args)
+        logger(hparams, args)
 
-        remainSpaces = 29 - len(data["name"])
+        remainSpaces = 29 - len(hparams.name)
         logging.info(
             "\n"
             + "--------------------------------------------------------------------------------\n"
             + "|                            Training experiment: "
-            + data["name"]
+            + hparams.name
             + " " * remainSpaces
             + "|\n"
             + "--------------------------------------------------------------------------------\n"
         )
 
-        trajectory_size = data["obsLen"] + data["predLen"]
+        trajectory_size = hparams.obsLen + hparams.predLen
 
         logging.info("Loading the training datasets...")
         train_loader = utils.DataLoader(
-            data["dataPath"],
-            data["trainDatasets"],
-            delimiter=data["delimiter"],
-            skip=data["skip"],
-            max_num_ped=data["maxNumPed"],
+            hparams.dataPath,
+            hparams.trainDatasets,
+            delimiter=hparams.delimiter,
+            skip=hparams.skip,
+            max_num_ped=hparams.maxNumPed,
             trajectory_size=trajectory_size,
         )
         logging.info("Loading the validation datasets...")
         val_loader = utils.DataLoader(
-            data["dataPath"],
-            data["validationDatasets"],
-            delimiter=data["delimiter"],
-            skip=data["skip"],
-            max_num_ped=data["maxNumPed"],
+            hparams.dataPath,
+            hparams.validationDatasets,
+            delimiter=hparams.delimiter,
+            skip=hparams.skip,
+            max_num_ped=hparams.maxNumPed,
             trajectory_size=trajectory_size,
         )
 
@@ -136,46 +136,31 @@ def main():
             train_loader,
             val_loader=val_loader,
             batch=False,
-            prefetch_size=data["prefetchSize"],
+            prefetch_size=hparams.prefetchSize,
         )
 
         logging.info("Creating the helper for the coordinates")
         helper = train_helper
 
         pooling_module = None
-        if isinstance(data["poolingModule"], list):
+        if isinstance(hparams.poolingModule, list):
             logging.info(
-                "Creating the combined pooling: {}".format(data["poolingModule"])
+                "Creating the combined pooling: {}".format(hparams.poolingModule)
             )
-            pooling_class = pooling_layers.CombinedPooling(
-                data["poolingModule"],
-                grid_size=data["gridSize"],
-                neighborhood_size=data["neighborhoodSize"],
-                max_num_ped=data["maxNumPed"],
-                embedding_size=data["embeddingSize"],
-                rnn_size=data["lstmSize"],
-            )
+            pooling_class = pooling_layers.CombinedPooling(hparams)
             pooling_module = pooling_class.pooling
-        elif data["poolingModule"] == "social":
-            logging.info("Creating the {} pooling".format(data["poolingModule"]))
-            pooling_class = pooling_layers.SocialPooling(
-                grid_size=data["gridSize"],
-                neighborhood_size=data["neighborhoodSize"],
-                max_num_ped=data["maxNumPed"],
-                embedding_size=data["embeddingSize"],
-                rnn_size=data["lstmSize"],
-            )
+
+        elif hparams.poolingModule == "social":
+            logging.info("Creating the {} pooling".format(hparams.poolingModule))
+            pooling_class = pooling_layers.SocialPooling(hparams)
             pooling_module = pooling_class.pooling
-        elif data["poolingModule"] == "occupancy":
-            logging.info("Creating the {} pooling".format(data["poolingModule"]))
-            pooling_class = pooling_layers.OccupancyPooling(
-                grid_size=data["gridSize"],
-                neighborhood_size=data["neighborhoodSize"],
-                max_num_ped=data["maxNumPed"],
-                embedding_size=data["embeddingSize"],
-                rnn_size=data["lstmSize"],
-            )
+
+        elif hparams.poolingModule == "occupancy":
+            logging.info("Creating the {} pooling".format(hparams.poolingModule))
+            pooling_class = pooling_layers.OccupancyPooling(hparams)
             pooling_module = pooling_class.pooling
+
+        hparams.add_hparam("learningRateSteps", train_loader.num_sequences)
 
         logging.info("Creating the model...")
         start = time.time()
@@ -185,32 +170,20 @@ def main():
             social_train_position_estimate,
             social_loss_function,
             pooling_module,
-            lstm_size=data["lstmSize"],
-            max_num_ped=data["maxNumPed"],
-            trajectory_size=trajectory_size,
-            embedding_size=data["embeddingSize"],
-            learning_rate=data["learningRate"],
-            clip_norm=data["clippingRatio"],
-            l2_norm=data["l2Rate"],
-            opt_momentum=data["optimizerMomentum"],
-            opt_decay=data["optimizerDecay"],
-            lr_steps=train_loader.num_sequences,
-            lr_decay=data["learningRateDecay"],
+            hparams,
         )
         end = time.time() - start
         logging.debug("Model created in {:.2f}s".format(end))
 
         # Define the path to where save the model and the checkpoints
-        if "modelFolder" in data:
+        if hparams.modelFolder:
             save_model = True
-            data["modelFolder"] = os.path.join(data["modelFolder"], data["name"])
-            if not os.path.exists(data["modelFolder"]):
-                os.makedirs(data["modelFolder"])
-                os.makedirs(os.path.join(data["modelFolder"], "checkpoints"))
-            model_path = os.path.join(data["modelFolder"], data["name"])
-            checkpoints_path = os.path.join(
-                data["modelFolder"], "checkpoints", data["name"]
-            )
+            model_folder = os.path.join(hparams.modelFolder, hparams.name)
+            if not os.path.exists(model_folder):
+                os.makedirs(model_folder)
+                os.makedirs(os.path.join(model_folder, "checkpoints"))
+            model_path = os.path.join(model_folder, hparams.name)
+            checkpoints_path = os.path.join(model_folder, "checkpoints", hparams.name)
             # Create the saver
             saver = tf.train.Saver()
 
@@ -226,7 +199,7 @@ def main():
             # Initialize all the variables in the graph
             sess.run(tf.global_variables_initializer())
 
-            for epoch in range(data["epochs"]):
+            for epoch in range(hparams.epochs):
                 logging.info("Starting epoch {}".format(epoch + 1))
 
                 # ==================== TRAINING PHASE ====================

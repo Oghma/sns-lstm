@@ -2,7 +2,6 @@
 
 import os
 import time
-import yaml
 import logging
 import argparse
 import numpy as np
@@ -17,8 +16,8 @@ from position_estimates import social_sample_position_estimate
 from beautifultable import BeautifulTable
 
 
-def logger(data, args):
-    log_file = data["name"] + "-sample.log"
+def logger(hparams, args):
+    log_file = hparams.name + "-train.log"
     log_folder = None
     level = "INFO"
     formatter = logging.Formatter(
@@ -28,8 +27,8 @@ def logger(data, args):
     # Check if you have to add a FileHandler
     if args.logFolder is not None:
         log_folder = args.logFolder
-    elif "logFolder" in data:
-        log_folder = data["logFolder"]
+    elif hparams.logFolder is not None:
+        log_folder = hparams.logFolder
 
     if log_folder is not None:
         log_file = os.path.join(log_folder, log_file)
@@ -39,8 +38,8 @@ def logger(data, args):
     # Set the level
     if args.logLevel is not None:
         level = args.logLevel.upper()
-    elif "logLevel" in data:
-        level = data["logLevel"].upper()
+    elif hparams.logLeve is not None:
+        level = hparams.logLevel.upper()
 
     # Get the logger
     logger = logging.getLogger()
@@ -109,42 +108,41 @@ def main():
 
     for experiment in experiments:
         # Load the parameters
-        with open(experiment) as fp:
-            data = yaml.load(fp)
+        hparams = utils.YParams(experiment)
         # Define the logger
-        logger(data, args)
+        logger(hparams, args)
 
-        remainSpaces = 29 - len(data["name"])
+        remainSpaces = 29 - len(hparams.name)
         logging.info(
             "\n"
             + "--------------------------------------------------------------------------------\n"
             + "|                            Sampling experiment: "
-            + data["name"]
+            + hparams.name
             + " " * remainSpaces
             + "|\n"
             + "--------------------------------------------------------------------------------\n"
         )
 
-        trajectory_size = data["obsLen"] + data["predLen"]
-        saveCoordinates = False
+        trajectory_size = hparams.obsLen + hparams.predLen
 
+        saveCoordinates = False
         if args.noSaveCoordinates is True:
             saveCoordinates = False
-        elif "saveCoordinates" in data:
-            saveCoordinates = data["saveCoordinates"]
+        elif hparams.saveCoordinates:
+            saveCoordinates = hparams.saveCoordinates
 
         if saveCoordinates:
-            coordinates_path = os.path.join("coordinates", data["name"])
+            coordinates_path = os.path.join("coordinates", hparams.name)
             if not os.path.exists("coordinates"):
                 os.makedirs("coordinates")
 
         logging.info("Loading the test datasets...")
         test_loader = utils.DataLoader(
-            data["dataPath"],
-            data["testDatasets"],
-            delimiter=data["delimiter"],
-            skip=data["skip"],
-            max_num_ped=data["maxNumPed"],
+            hparams.dataPath,
+            hparams.testDatasets,
+            delimiter=hparams.delimiter,
+            skip=hparams.skip,
+            max_num_ped=hparams.maxNumPed,
             trajectory_size=trajectory_size,
         )
 
@@ -153,45 +151,28 @@ def main():
             test_loader,
             val_loader=None,
             batch=False,
-            prefetch_size=data["prefetchSize"],
+            prefetch_size=hparams.prefetchSize,
         )
 
         logging.info("Creating the helper for the coordinates")
-        helper = sample_helper(data["obsLen"])
+        helper = sample_helper(hparams.obsLen)
 
         pooling_module = None
-        if isinstance(data["poolingModule"], list):
+        if isinstance(hparams.poolingModule, list):
             logging.info(
-                "Creating the combined pooling: {}".format(data["poolingModule"])
+                "Creating the combined pooling: {}".format(hparams.poolingModule)
             )
-            pooling_class = pooling_layers.CombinedPooling(
-                data["poolingModule"],
-                grid_size=data["gridSize"],
-                neighborhood_size=data["neighborhoodSize"],
-                max_num_ped=data["maxNumPed"],
-                embedding_size=data["embeddingSize"],
-                rnn_size=data["lstmSize"],
-            )
+            pooling_class = pooling_layers.CombinedPooling(hparams)
             pooling_module = pooling_class.pooling
-        elif data["poolingModule"] == "social":
-            logging.info("Creating the {} pooling".format(data["poolingModule"]))
-            pooling_class = pooling_layers.SocialPooling(
-                grid_size=data["gridSize"],
-                neighborhood_size=data["neighborhoodSize"],
-                max_num_ped=data["maxNumPed"],
-                embedding_size=data["embeddingSize"],
-                rnn_size=data["lstmSize"],
-            )
+
+        elif hparams.poolingModule == "social":
+            logging.info("Creating the {} pooling".format(hparams.poolingModule))
+            pooling_class = pooling_layers.SocialPooling(hparams)
             pooling_module = pooling_class.pooling
-        elif data["poolingModule"] == "occupancy":
-            logging.info("Creating the {} pooling".format(data["poolingModule"]))
-            pooling_class = pooling_layers.OccupancyPooling(
-                grid_size=data["gridSize"],
-                neighborhood_size=data["neighborhoodSize"],
-                max_num_ped=data["maxNumPed"],
-                embedding_size=data["embeddingSize"],
-                rnn_size=data["lstmSize"],
-            )
+
+        elif hparams.poolingModule == "occupancy":
+            logging.info("Creating the {} pooling".format(hparams.poolingModule))
+            pooling_class = pooling_layers.OccupancyPooling(hparams)
             pooling_module = pooling_class.pooling
 
         logging.info("Creating the model...")
@@ -201,33 +182,23 @@ def main():
             helper,
             social_sample_position_estimate,
             social_loss_function,
-            pooling_module,
-            lstm_size=data["lstmSize"],
-            max_num_ped=data["maxNumPed"],
-            trajectory_size=trajectory_size,
-            embedding_size=data["embeddingSize"],
-            learning_rate=data["learningRate"],
-            clip_norm=data["clippingRatio"],
-            l2_norm=data["l2Rate"],
-            opt_momentum=data["optimizerMomentum"],
-            opt_decay=data["optimizerDecay"],
-            lr_steps=test_loader.num_sequences,
-            lr_decay=data["learningRateDecay"],
+            hparams,
+            pooling_module=pooling_module,
         )
         end = time.time() - start
         logging.debug("Model created in {:.2f}s".format(end))
 
         # Define the path to the file that contains the variables of the model
-        data["modelFolder"] = os.path.join(data["modelFolder"], data["name"])
-        model_path = os.path.join(data["modelFolder"], data["name"])
+        model_folder = os.path.join(hparams.modelFolder, hparams.name)
+        model_path = os.path.join(model_folder, hparams.name)
 
         # Create a saver
         saver = tf.train.Saver()
 
         # Add to the computation graph the evaluation functions
         ade_sequence = utils.average_displacement_error(
-            model.new_coordinates[-data["predLen"] :],
-            model.input_data[:, -data["predLen"] :],
+            model.new_coordinates[-hparams.predLen :],
+            model.input_data[:, -hparams.predLen :],
             model.num_peds_frame,
         )
 
@@ -282,7 +253,7 @@ def main():
             ade = ade / test_loader.num_sequences
             fde = fde / test_loader.num_sequences
             logging.info("Sampling finished. ADE: {:.4f} FDE: {:.4f}".format(ade, fde))
-            results.append_row([data["name"], ade, fde])
+            results.append_row([hparams.name, ade, fde])
 
             if saveCoordinates:
                 coordinates_predicted = np.array(coordinates_predicted)
@@ -291,7 +262,7 @@ def main():
                     coordinates_predicted,
                     coordinates_gt,
                     peds_in_sequence,
-                    data["predLen"],
+                    hparams.predLen,
                     coordinates_path,
                 )
         tf.reset_default_graph()

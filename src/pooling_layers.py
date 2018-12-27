@@ -6,30 +6,20 @@ import tensorflow as tf
 class Pooling(ABC):
     """Abstract pooling class. Define the interface for the pooling layers."""
 
-    def __init__(
-        self,
-        grid_size=8,
-        neighborhood_size=4,
-        max_num_ped=100,
-        embedding_size=64,
-        rnn_size=128,
-    ):
+    def __init__(self, hparams):
         """Constructor of the Pooling class.
 
         Args:
-          grid_size: int or float.
-          neighboorhood_size: int or float.
-          max_num_ped: int. Maximum number of pedestrian in a single frame.
-          embedding_size int. Dimension of the output space of the embedding
-            layers.
-          rnn_size: int. The number of units in the LSTM cell.
+          hparams: An HParams instance. hparams must contains gridSize,
+            neighborhoodSize, maxNumPed, embeddingSize and rnnSize values.
+
         """
-        self.grid_size = grid_size
-        self.neighborhood_size = neighborhood_size
-        self.max_num_ped = max_num_ped
+        self.grid_size = hparams.gridSize
+        self.neighborhood_size = hparams.neighborhoodSize
+        self.max_num_ped = hparams.maxNumPed
 
         self.pooling_layer = tf.layers.Dense(
-            embedding_size,
+            hparams.embeddingSize,
             activation=tf.nn.relu,
             kernel_initializer=tf.contrib.layers.xavier_initializer(),
             name="Pooling/Layer",
@@ -121,35 +111,25 @@ class Pooling(ABC):
 class SocialPooling(Pooling):
     """Implement the Social layer defined in social LSTM paper"""
 
-    def __init__(
-        self,
-        grid_size=8,
-        neighborhood_size=4,
-        max_num_ped=100,
-        embedding_size=64,
-        rnn_size=128,
-    ):
-        """Constructor of the SocialPooling class.
+    def __init__(self, hparams):
+        """Constructor of the Social pooling class.
 
         Args:
-          grid_size: int or float.
-          neighboorhood_size: int or float.
-          max_num_ped: int. Maximum number of pedestrian in a single frame.
-          embedding_size int. Dimension of the output space of the embedding
-            layers.
-          rnn_size: int. The number of units in the LSTM cell.
+          hparams: An HParams instance. hparams must contains grid_size,
+            neighborhood_size, max_num_ped, embedding_size and rnn_size values.
+
         """
-        super().__init__(
-            grid_size=grid_size,
-            neighborhood_size=neighborhood_size,
-            max_num_ped=max_num_ped,
-            embedding_size=embedding_size,
-            rnn_size=rnn_size,
-        )
+        super().__init__(hparams)
 
         with tf.variable_scope("Social_Pooling"):
             self.grid = tf.Variable(
-                tf.zeros([max_num_ped * grid_size * grid_size, rnn_size], tf.float32),
+                tf.zeros(
+                    [
+                        self.max_num_ped * self.grid_size * self.grid_size,
+                        hparams.rnnSize,
+                    ],
+                    tf.float32,
+                ),
                 trainable=False,
                 name="grid",
             )
@@ -216,39 +196,27 @@ class SocialPooling(Pooling):
 class OccupancyPooling(Pooling):
     """Implement the Occupancy layer defined in social LSTM paper"""
 
-    def __init__(
-        self,
-        grid_size=8,
-        neighborhood_size=4,
-        max_num_ped=100,
-        embedding_size=64,
-        rnn_size=128,
-    ):
-        """Constructor of the SocialPooling class.
+    def __init__(self, hparams):
+        """Constructor of the Occupancy pooling class.
 
         Args:
-          grid_size: int or float.
-          neighboorhood_size: int or float.
-          max_num_ped: int. Maximum number of pedestrian in a single frame.
-          embedding_size int. Dimension of the output space of the embedding
-            layers.
-          rnn_size: int. The number of units in the LSTM cell.
+          hparams: An HParams instance. hparams must contains grid_size,
+            neighborhood_size, max_num_ped, embedding_size and rnn_size values.
+
         """
-        super().__init__(
-            grid_size=grid_size,
-            neighborhood_size=neighborhood_size,
-            max_num_ped=max_num_ped,
-            embedding_size=embedding_size,
-            rnn_size=rnn_size,
-        )
+        super().__init__(hparams)
 
         with tf.variable_scope("Social_Pooling"):
             self.grid = tf.Variable(
-                tf.zeros([max_num_ped * grid_size * grid_size, 1], tf.float32),
+                tf.zeros(
+                    [self.max_num_ped * self.grid_size * self.grid_size, 1], tf.float32
+                ),
                 trainable=False,
                 name="grid",
             )
-            self.updates = tf.ones([max_num_ped * max_num_ped, 1], name="updates")
+            self.updates = tf.ones(
+                [self.max_num_ped * self.max_num_ped, 1], name="updates"
+            )
 
     def pooling(self, pedestrians, coordinates, states, peds_mask, *args):
         """Compute the occupancy pooling.
@@ -311,56 +279,27 @@ class CombinedPooling:
     """Combined pooling class. Define multiple pooling layer combined with each
     other."""
 
-    def __init__(
-        self,
-        layers,
-        all_peds=False,
-        grid_size=8,
-        neighborhood_size=4,
-        max_num_ped=100,
-        embedding_size=64,
-        rnn_size=128,
-    ):
+    def __init__(self, hparams):
         """Constructor of the CombinedPooling class.
 
         Args:
-          layers: list of string. The pooling layers to build.
-          all_peds: boolean. If True, use the all_peds tensors for all the
-            pooling layers.
-          grid_size: int or float.
-          neighboorhood_size: int or float.
-          max_num_ped: int. Maximum number of pedestrian in a single frame.
-          embedding_size int. Dimension of the output space of the embedding
-            layers.
-          rnn_size: int. The number of units in the LSTM cell.
+          hparams: An HParams instance. hparams must contains grid_size,
+            neighborhood_size, max_num_ped, embedding_size, rnn_size, layers and
+            all_peds values.
 
         """
         self.__layers = []
         self.__all_peds_layers = []
 
-        for layer in layers:
+        for layer in hparams.layers:
             if layer == "social":
-                social = SocialPooling(
-                    grid_size=grid_size,
-                    neighborhood_size=neighborhood_size,
-                    max_num_ped=max_num_ped,
-                    embedding_size=embedding_size,
-                    rnn_size=rnn_size,
-                )
-                if all_peds:
+                social = SocialPooling(hparams)
+                if hparams.all_peds:
                     self.__all_peds_layers.append(social)
                 else:
                     self.__layers.append(social)
             elif layer == "occupancy":
-                self.__all_peds_layers.append(
-                    OccupancyPooling(
-                        grid_size=grid_size,
-                        neighborhood_size=neighborhood_size,
-                        max_num_ped=max_num_ped,
-                        embedding_size=embedding_size,
-                        rnn_size=rnn_size,
-                    )
-                )
+                self.__all_peds_layers.append(OccupancyPooling(hparams))
 
     def pooling(
         self, pedestrians, coordinates, states, peds_mask, all_peds, all_peds_mask

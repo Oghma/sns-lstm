@@ -4,7 +4,7 @@ import trajectory_decoders
 
 
 class SocialModel:
-    """SocialModel defines the model of the Social LSTM paper."""
+    """SocialModel defines the model described in the Social LSTM paper."""
 
     def __init__(
         self,
@@ -12,19 +12,8 @@ class SocialModel:
         helper,
         position_estimate,
         loss_function,
+        hparams,
         pooling_module=None,
-        lstm_size=128,
-        max_num_ped=100,
-        prediction_time=8,
-        trajectory_size=20,
-        embedding_size=64,
-        learning_rate=0.003,
-        clip_norm=5,
-        l2_norm=0.001,
-        opt_momentum=0.2,
-        opt_decay=0.95,
-        lr_steps=3000,
-        lr_decay=0.95,
     ):
         """Constructor of the SocialModel class.
 
@@ -33,16 +22,8 @@ class SocialModel:
           helper: A coordinates helper function.
           position_estimate: A position_estimate function.
           loss_function: a loss funtcion.
-          pooling_module: A pooling module function
-          lstm_size: int. The number of units in the LSTM cell.
-          max_num_ped: int. Maximum number of pedestrian in a single frame.
-          trajectories_size: int. Length of the trajectory (obs_length +
-            pred_len).
-          embedding_size: int. Dimension of the output space of the embedding
-            layers.
-          learning_rate: float. Learning rate.
-          dropout: float. Dropout probability.
-          clip_norm int. clip norm
+          hparams: An HParams instance.
+          pooling_module: A pooling module function.
 
         """
         # Create the tensor for input_data of shape
@@ -68,10 +49,12 @@ class SocialModel:
         # phase
         new_coordinates_processed = None
         # Output (or hidden states) of the LSTMs
-        cell_output = tf.zeros([max_num_ped, lstm_size], tf.float32)
+        cell_output = tf.zeros([hparams.max_num_ped, hparams.lstm_size], tf.float32)
 
         # Output size
         output_size = 5
+        # Trajectory size
+        trajectory_size = hparams.obsLen + hparams.predLen
 
         # Counter for the adaptive learning rate. Counts the number of batch
         # processed.
@@ -79,16 +62,16 @@ class SocialModel:
 
         # Define the LSTM with dimension lstm_size
         with tf.variable_scope("LSTM"):
-            self.cell = tf.nn.rnn_cell.LSTMCell(lstm_size, name="Cell")
+            self.cell = tf.nn.rnn_cell.LSTMCell(hparams.lstm_size, name="Cell")
 
             # Define the states of the LSTMs. zero_state returns a tensor of
             # shape [max_num_ped, state_size]
             with tf.name_scope("States"):
-                self.cell_states = self.cell.zero_state(max_num_ped, tf.float32)
+                self.cell_states = self.cell.zero_state(hparams.max_num_ped, tf.float32)
 
         # Define the layer with ReLu used for processing the coordinates
         self.coordinates_layer = tf.layers.Dense(
-            embedding_size,
+            hparams.embedding_size,
             activation=tf.nn.relu,
             kernel_initializer=tf.contrib.layers.xavier_initializer(),
             name="Coordinates/Layer",
@@ -104,7 +87,7 @@ class SocialModel:
         # Define the SocialTrajectoryDecoder.
         decoder = trajectory_decoders.SocialDecoder(
             self.cell,
-            max_num_ped,
+            hparams.max_num_ped,
             helper,
             pooling_module=pooling_module,
             output_layer=self.output_layer,
@@ -154,7 +137,7 @@ class SocialModel:
 
         with tf.variable_scope("Calculate_loss"):
             self.loss = loss_function(
-                self.new_coordinates[-prediction_time:, : self.num_peds_frame]
+                self.new_coordinates[-hparams.predLen :, : self.num_peds_frame]
             )
             self.loss = tf.div(self.loss, tf.cast(self.num_peds_frame, tf.float32))
 
@@ -162,22 +145,25 @@ class SocialModel:
         tvars = tf.trainable_variables()
         l2_loss = (
             tf.add_n([tf.nn.l2_loss(v) for v in tvars if "bias" not in v.name])
-            * l2_norm
+            * hparams.l2_norm
         )
         self.loss = self.loss + l2_loss
 
         # Step epoch learning rate decay
         learning_rate = tf.train.exponential_decay(
-            learning_rate, global_step, lr_steps, lr_decay
+            hparams.learning_rate, global_step, hparams.lr_steps, hparams.lr_decay
         )
 
         # Define the RMSProp optimizer
         optimizer = tf.train.RMSPropOptimizer(
-            learning_rate, decay=opt_decay, momentum=opt_momentum, centered=True
+            learning_rate,
+            decay=hparams.opt_decay,
+            momentum=hparams.opt_momentum,
+            centered=hparams.centered,
         )
         # Global norm clipping
         gradients, variables = zip(*optimizer.compute_gradients(self.loss))
-        clipped, _ = tf.clip_by_global_norm(gradients, clip_norm)
+        clipped, _ = tf.clip_by_global_norm(gradients, hparams.clip_norm)
         self.trainOp = optimizer.apply_gradients(
             zip(clipped, variables), global_step=global_step
         )
