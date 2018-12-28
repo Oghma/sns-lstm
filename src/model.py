@@ -1,29 +1,27 @@
 """Module that defines the SocialLSTM model."""
+import logging
 import tensorflow as tf
+
+import losses
+import pooling_layers
+import position_estimates
 import trajectory_decoders
+import coordinates_helpers
+
+TRAIN = "TRAIN"
+SAMPLE = "SAMPLE"
 
 
 class SocialModel:
     """SocialModel defines the model described in the Social LSTM paper."""
 
-    def __init__(
-        self,
-        dataset,
-        helper,
-        position_estimate,
-        loss_function,
-        hparams,
-        pooling_module=None,
-    ):
+    def __init__(self, dataset, hparams, phase=TRAIN):
         """Constructor of the SocialModel class.
 
         Args:
           dataset: A TrajectoriesDataset instance.
-          helper: A coordinates helper function.
-          position_estimate: A position_estimate function.
-          loss_function: a loss funtcion.
           hparams: An HParams instance.
-          pooling_module: A pooling module function.
+          phase: string. Train or sample phase
 
         """
         # Create the tensor for input_data of shape
@@ -59,6 +57,40 @@ class SocialModel:
         # Counter for the adaptive learning rate. Counts the number of batch
         # processed.
         global_step = tf.Variable(0, trainable=False)
+
+        # Create the helper class
+        logging.info("Creating the social helper")
+        if phase == TRAIN:
+            helper = coordinates_helpers.train_helper
+        elif phase == SAMPLE:
+            helper = coordinates_helpers.sample_helper(hparams.obsLen)
+
+        # Create the pooling layer
+        pooling_module = None
+        if isinstance(hparams.poolingModule, list):
+            logging.info(
+                "Creating the combined pooling: {}".format(hparams.poolingModule)
+            )
+            pooling_module = pooling_layers.CombinedPooling(hparams)
+
+        elif hparams.poolingModule == "social":
+            logging.info("Creating the {} pooling".format(hparams.poolingModule))
+            pooling_module = pooling_layers.SocialPooling(hparams)
+
+        elif hparams.poolingModule == "occupancy":
+            logging.info("Creating the {} pooling".format(hparams.poolingModule))
+            pooling_module = pooling_layers.OccupancyPooling(hparams)
+
+        # Create the position estimates functions
+        logging.info("Creating the social position estimate function")
+        if phase == TRAIN:
+            position_estimate = position_estimates.social_train_position_estimate
+        elif phase == SAMPLE:
+            position_estimate = position_estimates.social_sample_position_estimate
+
+        # Create the loss function
+        logging.info("Creating the social loss function")
+        loss_function = losses.social_loss_function
 
         # Define the LSTM with dimension lstm_size
         with tf.variable_scope("LSTM"):

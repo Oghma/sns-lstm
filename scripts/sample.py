@@ -7,16 +7,11 @@ import logging
 import argparse
 import numpy as np
 import tensorflow as tf
-
-import utils
-import pooling_layers
-from logger import setLogger
-from model import SocialModel
-from coordinates_helpers import sample_helper
-from losses import social_loss_function
-from position_estimates import social_sample_position_estimate
 from beautifultable import BeautifulTable
 
+import utils
+from logger import setLogger
+from model import SocialModel
 
 
 PHASE = "SAMPLE"
@@ -114,37 +109,9 @@ def main():
             prefetch_size=hparams.prefetchSize,
         )
 
-        logging.info("Creating the helper for the coordinates")
-        helper = sample_helper(hparams.obsLen)
-
-        pooling_module = None
-        if isinstance(hparams.poolingModule, list):
-            logging.info(
-                "Creating the combined pooling: {}".format(hparams.poolingModule)
-            )
-            pooling_class = pooling_layers.CombinedPooling(hparams)
-            pooling_module = pooling_class.pooling
-
-        elif hparams.poolingModule == "social":
-            logging.info("Creating the {} pooling".format(hparams.poolingModule))
-            pooling_class = pooling_layers.SocialPooling(hparams)
-            pooling_module = pooling_class.pooling
-
-        elif hparams.poolingModule == "occupancy":
-            logging.info("Creating the {} pooling".format(hparams.poolingModule))
-            pooling_class = pooling_layers.OccupancyPooling(hparams)
-            pooling_module = pooling_class.pooling
-
         logging.info("Creating the model...")
         start = time.time()
-        model = SocialModel(
-            dataset,
-            helper,
-            social_sample_position_estimate,
-            social_loss_function,
-            hparams,
-            pooling_module=pooling_module,
-        )
+        model = SocialModel(dataset, hparams, phase=PHASE)
         end = time.time() - start
         logging.debug("Model created in {:.2f}s".format(end))
 
