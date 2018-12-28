@@ -2,6 +2,7 @@
 
 import os
 import time
+import pickle
 import logging
 import argparse
 import numpy as np
@@ -270,8 +271,8 @@ def main():
 
 
 def saveCoords(pred, coordinates_gt, peds_in_sequence, pred_len, coordinates_path):
-    """Save the predicted, the ground truth coordiantes and the number of
-    pedestrian in sequence. The files are in numpy format.
+    """Save a pickle file with a dictionary containing the predicted coordinates,
+    the ground truth coordiantes and the number of pedestrian in sequence.
 
     Args:
       pred: numpy array [num_sequence, trajectory_size - 1,
@@ -284,18 +285,16 @@ def saveCoords(pred, coordinates_gt, peds_in_sequence, pred_len, coordinates_pat
       coordinates_path: string. Path to where to save the coordinates.
 
     """
+    coordinates = {"groundTruth": coordinates_gt, "pedsInSequence": peds_in_sequence}
     coordinates_pred = coordinates_gt.copy()
 
     for index, sequence in enumerate(pred):
         coords = sequence[-pred_len:, : peds_in_sequence[index]]
-        # Change the shape of the array from [trajectory_size, max_num_ped, 2]
-        # to [max_num_ped, trajectory_size, 2]
-        coords = np.moveaxis(coords, 0, 1)
-        coordinates_pred[index, : peds_in_sequence[index], -pred_len:] = coords
+        coordinates_pred[index, -pred_len:, : peds_in_sequence[index]] = coords
 
-    np.save(coordinates_path + "_gt", coordinates_gt)
-    np.save(coordinates_path + "_predicted", coordinates_pred)
-    np.save(coordinates_path + "_peds", peds_in_sequence)
+    coordinates["predicted"] = coordinates_pred
+    with open(coordinates_path, "wb") as fp:
+        pickle.dump(coordinates, fp)
 
 
 if __name__ == "__main__":
