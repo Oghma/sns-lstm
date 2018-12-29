@@ -135,7 +135,7 @@ def main():
 
                 for sequence in range(train_loader.num_sequences):
                     start = time.time()
-                    loss, _ = sess.run([model.loss, model.trainOp])
+                    loss, _ = sess.run([model.loss, model.train_optimizer])
                     end = time.time() - start
 
                     logging.info(

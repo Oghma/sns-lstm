@@ -3,18 +3,18 @@ import math
 import tensorflow as tf
 
 
-def social_train_position_estimate(cell_output, coordinates_gt, output_size, *args):
+def social_train_position_estimate(cell_output, output_size, coordinates_gt):
     """Calculate the probability density function in training phase.
 
     Args:
       cell_output: tensor of shape [max_num_ped, output_size]. The output of the
         LSTM after applying a linear layer.
+      output_size: int. Dimension of the output size.
       coordinates_gt: tensor of shape [max_num_ped, 2]. Ground truth
         coordinates.
-      output_size: int. Dimension of the output size.
 
     Returns:
-      tuple containing a tensor of shape [max_num_ped, 2] that contains the pdf.
+      tensor of shape [max_num_ped, 2] that contains the pdf.
 
     """
     # Calculate the probability density function on Graves (2013) equations.
@@ -48,28 +48,19 @@ def social_train_position_estimate(cell_output, coordinates_gt, output_size, *ar
         n_den = tf.multiply(
             2.0, tf.multiply(math.pi, tf.multiply(stds, tf.sqrt(rho_neg)))
         )
-        return tf.div(n_num, n_den), None
+        return tf.div(n_num, n_den)
 
 
-def social_sample_position_estimate(
-    cell_output, coordinates_gt, output_size, layer_output
-):
+def social_sample_position_estimate(cell_output, output_size):
     """Calculate the coordinates in sampling phase.
 
     Args:
       cell_output: tensor of shape [max_num_ped, output_size]. The output of the
         LSTM after applying a linear layer.
-      coordinates_gt: tensor of shape [max_num_ped, 2]. Ground truth
-        coordinates.
       output_size: int. Dimension of the output size.
-      layer_output: tf.layer instance. Layer used for process the new
-        coordinates sampled.
 
     Returns:
-      tuple containing two tensors: the first has shape [max_num_ped,2] and
-        contains the sampled coordinates. The second has shape [max_num_ped,
-        embedding_size] and contains the output of the linear layer with input
-        the sampled coordinates.
+      tensor of shape [max_num_ped, 2] that contains the sampled coordinates.
 
     """
 
@@ -103,4 +94,4 @@ def social_sample_position_estimate(
         coords_y = mu_y + std_y * correlation
 
         coordinates = tf.stack([coords_x, coords_y], 1)
-        return coordinates, layer_output(coordinates)
+        return coordinates

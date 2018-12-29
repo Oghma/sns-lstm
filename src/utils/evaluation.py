@@ -27,7 +27,7 @@ def average_displacement_error(coordinates_predicted, coordinates_gt, num_peds):
     cond = lambda i, ade: tf.less(i, num_peds)
 
     def body(i, ade):
-        ade_ped = coordinates_gt[i] - coordinates_predicted[:, i]
+        ade_ped = coordinates_gt[:, i] - coordinates_predicted[:, i]
         ade_ped = tf.norm(ade_ped)
         return tf.add(i, 1), tf.add(ade, ade_ped)
 

@@ -124,13 +124,15 @@ def main():
 
         # Add to the computation graph the evaluation functions
         ade_sequence = utils.average_displacement_error(
-            model.new_coordinates[-hparams.predLen :],
-            model.input_data[:, -hparams.predLen :],
+            model.new_pedestrians_coordinates[-hparams.predLen :],
+            model.pedestrians_coordinates[-hparams.predLen :],
             model.num_peds_frame,
         )
 
         fde_sequence = utils.final_displacement_error(
-            model.new_coordinates[-1], model.input_data[:, -1], model.num_peds_frame
+            model.new_pedestrians_coordinates[-1],
+            model.pedestrians_coordinates[-1],
+            model.num_peds_frame,
         )
 
         ade = 0
@@ -166,8 +168,8 @@ def main():
                     [
                         ade_sequence,
                         fde_sequence,
-                        model.new_coordinates,
-                        model.input_data,
+                        model.new_pedestrians_coordinates,
+                        model.pedestrians_coordinates,
                         model.num_peds_frame,
                     ]
                 )

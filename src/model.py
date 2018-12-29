@@ -5,7 +5,6 @@ import tensorflow as tf
 import losses
 import pooling_layers
 import position_estimates
-import trajectory_decoders
 import coordinates_helpers
 
 TRAIN = "TRAIN"
@@ -24,39 +23,37 @@ class SocialModel:
           phase: string. Train or sample phase
 
         """
-        # Create the tensor for input_data of shape
-        # [max_num_ped, trajectory_size, 2]
-        self.input_data = dataset.tensors[0]
-        # Create the tensor for the ped mask of shape [max_num_ped, max_num_ped,
-        # trajectory_size]
-        self.peds_mask = dataset.tensors[1]
+        # Create the tensor for the pedestrians of shape
+        # [trajectory_size, max_num_ped, 2]
+        self.pedestrians_coordinates = dataset.tensors[0]
+        # Create the tensor for the ped mask of shape
+        # [trajectory_size, max_num_ped, max_num_ped]
+        pedestrians_mask = dataset.tensors[1]
         # Create the tensor for num_peds_frame
         self.num_peds_frame = dataset.tensors[2]
         # Create the tensor for all pedestrians of shape
-        # [max_num_ped, trajectory_size,2]
-        self.all_peds = dataset.tensors[3]
+        # [trajectory_size, max_num_ped, 2]
+        all_pedestrians_coordinates = dataset.tensors[3]
         # Create the for the ped mask of shape
-        # [max_num_ped, max_num_ped, trajectory_size]
-        self.all_peds_mask = dataset.tensors[4]
+        # [trajectory_size, max_num_ped, max_num_ped]
+        all_pedestrians_mask = dataset.tensors[4]
 
         # Store the parameters
         # In training phase the list contains the values to minimize. In
         # sampling phase it has the coordinates predicted
-        self.new_coordinates = []
-        # The predicted coordinates processed by the linear layer in sampling
-        # phase
-        new_coordinates_processed = None
-        # Output (or hidden states) of the LSTMs
-        cell_output = tf.zeros([hparams.max_num_ped, hparams.lstm_size], tf.float32)
+        self.new_pedestrians_coordinates = []
+        # Contain the predicted coordinates or the pdf of the last frame computed
+        new_pedestrians_coordinates = self.pedestrians_coordinates[0]
 
-        # Output size
+        # Output size of the linear layer
         output_size = 5
-        # Trajectory size
         trajectory_size = hparams.obsLen + hparams.predLen
 
         # Counter for the adaptive learning rate. Counts the number of batch
         # processed.
-        global_step = tf.Variable(0, trainable=False)
+        global_step = tf.Variable(0, trainable=False, name="Global_step")
+
+        # ============================ BUILD MODEL ============================
 
         # Create the helper class
         logging.info("Creating the social helper")
@@ -71,15 +68,15 @@ class SocialModel:
             logging.info(
                 "Creating the combined pooling: {}".format(hparams.poolingModule)
             )
-            pooling_module = pooling_layers.CombinedPooling(hparams)
+            pooling_module = pooling_layers.CombinedPooling(hparams).pooling
 
         elif hparams.poolingModule == "social":
             logging.info("Creating the {} pooling".format(hparams.poolingModule))
-            pooling_module = pooling_layers.SocialPooling(hparams)
+            pooling_module = pooling_layers.SocialPooling(hparams).pooling
 
         elif hparams.poolingModule == "occupancy":
             logging.info("Creating the {} pooling".format(hparams.poolingModule))
-            pooling_module = pooling_layers.OccupancyPooling(hparams)
+            pooling_module = pooling_layers.OccupancyPooling(hparams).pooling
 
         # Create the position estimates functions
         logging.info("Creating the social position estimate function")
@@ -92,110 +89,120 @@ class SocialModel:
         logging.info("Creating the social loss function")
         loss_function = losses.social_loss_function
 
-        # Define the LSTM with dimension lstm_size
-        with tf.variable_scope("LSTM"):
-            self.cell = tf.nn.rnn_cell.LSTMCell(hparams.lstm_size, name="Cell")
+        # ============================ MODEL LAYERS ============================
 
-            # Define the states of the LSTMs. zero_state returns a tensor of
-            # shape [max_num_ped, state_size]
+        # Define the LSTM with dimension rnn_size
+        with tf.variable_scope("LSTM"):
+            cell = tf.nn.rnn_cell.LSTMCell(hparams.rnnSize, name="Cell")
+            # Output (or hidden states) of the LSTMs
+            cell_output = tf.zeros(
+                [hparams.maxNumPed, hparams.rnnSize], tf.float32, name="Output"
+            )
+            # Define the states of the LSTMs. zero_state returns a named tuple
+            # with two tensors of shape [max_num_ped, state_size]
             with tf.name_scope("States"):
-                self.cell_states = self.cell.zero_state(hparams.max_num_ped, tf.float32)
+                cell_states = cell.zero_state(hparams.maxNumPed, tf.float32)
 
         # Define the layer with ReLu used for processing the coordinates
-        self.coordinates_layer = tf.layers.Dense(
-            hparams.embedding_size,
+        coordinates_layer = tf.layers.Dense(
+            hparams.embeddingSize,
             activation=tf.nn.relu,
             kernel_initializer=tf.contrib.layers.xavier_initializer(),
             name="Coordinates/Layer",
         )
 
         # Define the layer with ReLu used as output_layer for the decoder
-        self.output_layer = tf.layers.Dense(
+        output_layer = tf.layers.Dense(
             output_size,
             kernel_initializer=tf.contrib.layers.xavier_initializer(),
             name="Position_estimation/Layer",
         )
 
-        # Define the SocialTrajectoryDecoder.
-        decoder = trajectory_decoders.SocialDecoder(
-            self.cell,
-            hparams.max_num_ped,
-            helper,
-            pooling_module=pooling_module,
-            output_layer=self.output_layer,
-        )
-
         # Decode the coordinates
         for frame in range(trajectory_size - 1):
-            # Processing the coordinates
-            self.coordinates_preprocessed = self.coordinates_layer(
-                self.input_data[:, frame]
+            # Processing the coordinates. Apply the liner layer with relu
+            current_coordinates = helper(
+                frame, self.pedestrians_coordinates[frame], new_pedestrians_coordinates
             )
-            all_peds_preprocessed = self.coordinates_layer(self.all_peds[:, frame])
+            pedestrians_coordinates_preprocessed = coordinates_layer(
+                current_coordinates
+            )
 
-            # Initialize the decoder passing the real coordinates, the
-            # coordinates that the model has predicted and the states of the
-            # LSTMs. Which coordinates the model will use will be decided by the
-            # helper function
-            decoder.initialize(
-                frame,
-                self.coordinates_preprocessed,
-                new_coordinates_processed,
-                self.cell_states,
-                all_peds_preprocessed,
-                hidden_states=cell_output,
-                peds_mask=self.peds_mask[:, :, frame],
-                all_peds_mask=self.all_peds_mask[:, :, frame],
-            )
-            # compute_pass returns a tuple of two tensors. cell_output are the
-            # output of the self.cell with shape [max_num_ped , output_size] and
-            # cell_states are the states with shape
-            # [max_num_ped, LSTMStateTuple()]
-            cell_output, self.cell_states, layered_output = decoder.step()
+            # If pooling_module is not None, add the pooling layer
+            if pooling_module is not None:
+                pooling_output = pooling_module(
+                    current_coordinates,
+                    current_coordinates,
+                    cell_output,
+                    pedestrians_mask[frame],
+                    all_pedestrians_coordinates[frame],
+                    all_pedestrians_mask[frame],
+                )
+                cell_input = tf.concat(
+                    [pedestrians_coordinates_preprocessed, pooling_output],
+                    1,
+                    name="Rnn_input",
+                )
+            else:
+                cell_input = pedestrians_coordinates_preprocessed
 
-            # Compute the new coordinates
-            new_coordinates, new_coordinates_processed = position_estimate(
-                layered_output,
-                self.input_data[:, frame + 1],
-                output_size,
-                self.coordinates_layer,
-            )
+            # Compute a pass
+            cell_output, cell_states = cell(cell_input, cell_states)
+
+            # Apply the linear layer to the cell output
+            layered_output = output_layer(cell_output)
+
+            # Compute the new coordinates or the pdf
+            if phase == TRAIN:
+                new_pedestrians_coordinates = position_estimate(
+                    layered_output, output_size, self.pedestrians_coordinates[frame + 1]
+                )
+            elif phase == SAMPLE:
+                new_pedestrians_coordinates = position_estimate(
+                    layered_output, output_size
+                )
 
             # Append new_coordinates
-            self.new_coordinates.append(new_coordinates)
+            self.new_pedestrians_coordinates.append(new_pedestrians_coordinates)
 
         # self.new_coordinates has shape [trajectory_size - 1, max_num_ped]
-        self.new_coordinates = tf.stack(self.new_coordinates)
+        self.new_pedestrians_coordinates = tf.stack(self.new_pedestrians_coordinates)
 
-        with tf.variable_scope("Calculate_loss"):
-            self.loss = loss_function(
-                self.new_coordinates[-hparams.predLen :, : self.num_peds_frame]
+        if phase == TRAIN:
+            with tf.variable_scope("Calculate_loss"):
+                self.loss = loss_function(
+                    self.new_pedestrians_coordinates[
+                        -hparams.predLen :, : self.num_peds_frame
+                    ]
+                )
+                self.loss = tf.div(self.loss, tf.cast(self.num_peds_frame, tf.float32))
+
+            # Add weights regularization
+            tvars = tf.trainable_variables()
+            l2_loss = (
+                tf.add_n([tf.nn.l2_loss(v) for v in tvars if "bias" not in v.name])
+                * hparams.l2Rate
             )
-            self.loss = tf.div(self.loss, tf.cast(self.num_peds_frame, tf.float32))
+            self.loss = self.loss + l2_loss
 
-        # Add weights regularization
-        tvars = tf.trainable_variables()
-        l2_loss = (
-            tf.add_n([tf.nn.l2_loss(v) for v in tvars if "bias" not in v.name])
-            * hparams.l2_norm
-        )
-        self.loss = self.loss + l2_loss
+            # Step epoch learning rate decay
+            learning_rate = tf.train.exponential_decay(
+                hparams.learningRate,
+                global_step,
+                hparams.learningRateSteps,
+                hparams.learningRateDecay,
+            )
 
-        # Step epoch learning rate decay
-        learning_rate = tf.train.exponential_decay(
-            hparams.learning_rate, global_step, hparams.lr_steps, hparams.lr_decay
-        )
-
-        # Define the RMSProp optimizer
-        optimizer = tf.train.RMSPropOptimizer(
-            learning_rate,
-            decay=hparams.opt_decay,
-            momentum=hparams.opt_momentum,
-            centered=hparams.centered,
-        )
-        # Global norm clipping
-        gradients, variables = zip(*optimizer.compute_gradients(self.loss))
-        clipped, _ = tf.clip_by_global_norm(gradients, hparams.clip_norm)
-        self.trainOp = optimizer.apply_gradients(
-            zip(clipped, variables), global_step=global_step
-        )
+            # Define the RMSProp optimizer
+            optimizer = tf.train.RMSPropOptimizer(
+                learning_rate,
+                decay=hparams.optimizerDecay,
+                momentum=hparams.optimizerMomentum,
+                centered=hparams.centered,
+            )
+            # Global norm clipping
+            gradients, variables = zip(*optimizer.compute_gradients(self.loss))
+            clipped, _ = tf.clip_by_global_norm(gradients, hparams.clippingRatio)
+            self.train_optimizer = optimizer.apply_gradients(
+                zip(clipped, variables), global_step=global_step
+            )
