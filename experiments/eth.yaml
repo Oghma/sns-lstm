@@ -74,7 +74,7 @@ gridSize: 8
 # Size of the neighborhood
 neighborhoodSize: 2
 # Number of hidden
-lstmSize: 128
+rnnSize: 128
 # Dimension of the embedding layer 
 embeddingSize: 64
 # Type of pooling module to use. Two option supported: social or null
