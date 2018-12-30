@@ -1,6 +1,6 @@
-"""Data loader classes for the LSTMs models. The classes load datasets,
-preprocess them and create generators that return sequences of trajectories or
-batches of trajectories.
+"""Module that defines the classes that provides the input for the classes
+defined in the dataset module. Each class load datasets, preprocess them and
+create two generators that return sequences or batches of trajectories.
 
 """
 import os
@@ -12,8 +12,7 @@ import tensorflow as tf
 
 class DataLoader:
     """Data loader class that load the given datasets, preprocess them and create
-    two generators that return sequences of trajectories or batches of
-    trajectories.
+    two generators that return sequences or batches of trajectories.
 
     """
 
@@ -72,7 +71,7 @@ class DataLoader:
         """Generator method that returns an iterator pointing to the next batch.
 
         Returns:
-            Generator object which contains a list containing sequences of
+            Generator object that contains a list containing sequences of
               trajectories of size batch_size a list containing the associated
               grid layer of size batch_size a list containing the number of
               pedestrian in the sequences, a list containing all pedestrians in
@@ -101,7 +100,7 @@ class DataLoader:
         """Generator method that returns an iterator pointing to the next sequence.
 
         Returns:
-          Generator object which contains a sequence of trajectories, the
+          Generator object that contains a sequence of trajectories, the
             associated grid layer the number of pedestrian in the sequence, a
             list containing all pedestrians in the sequence and a list
             containing the grid layer with all pedestrians.
@@ -115,8 +114,8 @@ class DataLoader:
                 sequence, grid, num_peds, all_peds_mask = self.__get_sequence(
                     trajectories, all_peds[:, :, 1]
                 )
-
-                yield (sequence, grid, num_peds, all_peds[:, :, [2, 3]], all_peds_mask)
+                all_peds_moved = np.moveaxis(all_peds[:, :, [2, 3]], 1, 0)
+                yield (sequence, grid, num_peds, all_peds_moved, all_peds_mask)
 
     def __load_data(self, delimiter):
         """Load the datasets and define the list __frames.
@@ -156,7 +155,9 @@ class DataLoader:
         """Preprocess the datasets and define the number of sequences and batches.
 
         The method iterates on __frames saving on the list __trajectories only
-        the trajectories with length trajectory_size.
+        the trajectories with length trajectory_size. The list
+        __trajectories_all_peds preserves all the trajectories inside the
+        sequence.
 
         """
         # Keep only the trajectories trajectory_size long
@@ -182,14 +183,15 @@ class DataLoader:
                 for ped in peds:
                     # Get the frames where ped appear
                     frames = sequence[sequence[:, 1] == ped, :]
-                    # Check that the pedestrian is not standing all time
+                    # Check the trajectory is long enough and the pedestrian is
+                    # not standing all time
                     if (
                         frames.shape[0] == self.trajectory_size
                         and not np.all(frames[:, 2] == frames[0, 2])
                         and not np.all(frames[:, 3] == frames[0, 3])
                     ):
                         traj_frame.append(frames)
-                # If no trajectory is long enough traj_frame is empty
+                # If no trajectory is long enough traj_frame is empty. Otherwise
                 if traj_frame:
                     trajectories.append(traj_frame)
                     trajectories_all_peds.append(self.__all_peds(sequences))
@@ -209,20 +211,19 @@ class DataLoader:
         logging.info("There are {} batches in loader".format(self.num_batches))
 
     def __get_sequence(self, trajectories, all_peds):
-        """Returns a sequence of trajectories of shape [maxNumPed, trajectory_size, 2]
+        """Returns a sequence of trajectories of shape [trajectory_size, maxNumPed, 2]
 
         Args:
           trajectories: list of numpy array. Each array is a trajectory.
-
           all_peds: numpy array of shape [max_num_ped, trajectory_size]. Array
             that contains the ID of all pedestrians.
 
         Returns:
-          tuple containing a numpy array with shape [max_num_ped,
-            trajectory_size, 2] that contains all the trajectories, a numpy
-            array with shape [max_num_ped, max_num_ped, trajectory_size] that is
-            the grid layer, the number of pedestrian in the sequence and a numpy
-            array with shape [max_num_ped, max_num_ped, trajectory_size] that is
+          tuple containing a numpy array with shape [trajectory_size,
+            max_num_ped, 2] that contains all the trajectories, a numpy array
+            with shape [trajectory_size, max_num_ped, max_num_ped] that is the
+            grid layer, the number of pedestrian in the sequence and a numpy
+            array with shape [trajectory_size, max_num_ped, max_num_ped] that is
             the grid layer of all pedestrians.
 
         """
@@ -252,7 +253,13 @@ class DataLoader:
             all_peds_mask[idx, all_peds_mask[idx] == ped + 1] = 0
         all_peds_mask = all_peds_mask.astype(bool, copy=False)
 
-        return sequence, grid, num_peds_in_sequence, all_peds_mask
+        # Chane shape of the arrays. From [max_num_ped, trajectory_size] to
+        # [trajectory_size, max_num_ped]
+        sequence_moved = np.moveaxis(sequence, 1, 0)
+        grid_moved = np.moveaxis(grid, 2, 0)
+        all_peds_mask_moved = np.moveaxis(all_peds_mask, 2, 0)
+
+        return sequence_moved, grid_moved, num_peds_in_sequence, all_peds_mask_moved
 
     def __all_peds(self, sequences):
         """Create a ndarray containing the coordinates of all pedestrians in the
@@ -278,9 +285,9 @@ class DataLoader:
         """Define the type and the shape of the arrays that tensorflow will use"""
         self.output_types = (tf.float32, tf.bool, tf.int32, tf.float32, tf.bool)
         self.shape = (
-            tf.TensorShape([self.max_num_ped, self.trajectory_size, 2]),
-            tf.TensorShape([self.max_num_ped, self.max_num_ped, self.trajectory_size]),
+            tf.TensorShape([self.trajectory_size, self.max_num_ped, 2]),
+            tf.TensorShape([self.trajectory_size, self.max_num_ped, self.max_num_ped]),
             tf.TensorShape([]),
-            tf.TensorShape([self.max_num_ped, self.trajectory_size, 2]),
-            tf.TensorShape([self.max_num_ped, self.max_num_ped, self.trajectory_size]),
+            tf.TensorShape([self.trajectory_size, self.max_num_ped, 2]),
+            tf.TensorShape([self.trajectory_size, self.max_num_ped, self.max_num_ped]),
         )
