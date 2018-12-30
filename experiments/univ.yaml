@@ -86,7 +86,7 @@ poolingModule: "social"
 # Folder where to save the logs
 logFolder: "logs"
 # Logger level
-level: "INFO"
+logLevel: "INFO"
 # Folder where to save the model
 modelFolder: "models"
 # Save the sampled coordinates
