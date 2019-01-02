@@ -1,7 +1,7 @@
 """Module that defines the classes that provide the input tensors for the
 models. Each class defines at least 2 iterators: the iterator for the
 sequence/batch and the iterator for the number of pedestrian in the
-sequence/batch. All iterators are stored in the variable tensor of the class.
+sequence/batch. Each class store the iterators in the `tensors` variable.
 
 """
 import tensorflow as tf
@@ -10,10 +10,12 @@ import tensorflow as tf
 class TrajectoriesDataset:
     """Class that defines the tensors iterators used as input for the models.
 
-    TrajectoriesDataset defines 2 iterators: the sequence/batch iterator and the
-    number of pedestrian in the sequence/batch iterator. Both iterators are
-    stored in the variable self.tensors and the tensors they return have shape
-    and type defined by the train_loader class.
+    TrajectoriesDataset defines the following iterators: the sequence/batch
+    iterator, the number of pedestrian in the sequence/batch iterator, the mask
+    for each frame of the sequence/batch, the sequence/batch iterator with all
+    pedestrians in the frame and the mask for each frame of the all pedestrians
+    sequence/batch. The iterators have shape and type defined by the
+    train_loader class and they are stored inside the variable `tensors`.
 
     """
 
@@ -53,7 +55,7 @@ class TrajectoriesDataset:
                     val_loader.next_sequence, val_loader.output_types, val_loader.shape
                 )
 
-        # If batch is True, self.tensor will contain a batch of sequences and
+        # If batch is True, self.tensors will contain a batch of sequences and
         # not a single sequence
         if batch:
             train_dataset = train_dataset.batch(batch_size, drop_remainder=True)
