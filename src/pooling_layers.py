@@ -229,7 +229,7 @@ class OccupancyPooling(Pooling):
           peds_mask: tensor of shape [max_num_ped, max_num_ped]. Grid layer.
 
         Returns:
-          The social pooling layer
+          The occupancy pooling layer
 
         """
         top_left, bottom_right = self._get_bounds(pedestrians)
@@ -307,7 +307,7 @@ class CombinedPooling:
         """Compute the combined pooling.
 
         Args:
-
+          pedestrians: tensor of shape [max_num_ped, 2]. Pedestrians.
           coordinates: tensor of shape [max_num_ped, 2]. Coordinates.
           states: tensor of shape [max_num_ped, rnn_size]. Cell states of the
             LSTM.
