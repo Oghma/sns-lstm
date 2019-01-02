@@ -52,11 +52,11 @@ def social_train_position_estimate(cell_output, output_size, coordinates_gt):
 
 
 def social_sample_position_estimate(cell_output, output_size):
-    """Calculate the coordinates in sampling phase.
+    """Calculate the new coordinates in sampling phase.
 
     Args:
       cell_output: tensor of shape [max_num_ped, output_size]. The output of the
-        LSTM after applying a linear layer.
+        LSTM after the linear layer.
       output_size: int. Dimension of the output size.
 
     Returns:
@@ -77,8 +77,8 @@ def social_sample_position_estimate(cell_output, output_size):
         rho = tf.tanh(rho)
 
         # Kaiser-Dickman algorithm (Kaiser & Dickman, 1962)
-        # Generate two sample X1, X2 from the standard normal distribution (mu =
-        # 0, sigma = 1)
+        # Generate two sample X1, X2 from the standard normal distribution
+        # (mu = 0, sigma = 1)
         normal_coords = tf.random.normal(tf.TensorShape([mu_x.shape[0], 2]))
         # Generate the correlation.
         # correlation = rho * X1 + sqrt(1 - pow(rho)) * X2
