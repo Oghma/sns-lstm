@@ -77,12 +77,12 @@ class Pooling(ABC):
             the grid layer of the neighbours.
 
         """
-        cell_x = (
-            tf.floor((coordinates[:, 0] - top_left[:, 0]) / self.neighborhood_size)
+        cell_x = tf.floor(
+            ((coordinates[:, 0] - top_left[:, 0]) / self.neighborhood_size)
             * self.grid_size
         )
-        cell_y = (
-            tf.floor((top_left[:, 1] - coordinates[:, 1]) / self.neighborhood_size)
+        cell_y = tf.floor(
+            ((top_left[:, 1] - coordinates[:, 1]) / self.neighborhood_size)
             * self.grid_size
         )
         grid_pos = cell_x + cell_y * self.grid_size
