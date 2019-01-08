@@ -291,10 +291,10 @@ class CombinedPooling:
         self.__layers = []
         self.__all_peds_layers = []
 
-        for layer in hparams.layers:
+        for layer in hparams.poolingModule:
             if layer == "social":
                 social = SocialPooling(hparams)
-                if hparams.all_peds:
+                if hparams.allPeds:
                     self.__all_peds_layers.append(social)
                 else:
                     self.__layers.append(social)
