@@ -39,15 +39,13 @@ class SocialModel:
         all_pedestrians_mask = dataset.tensors[4]
 
         # Store the parameters
-        # In training phase the list contains the values to minimize. In
-        # sampling phase it has the coordinates predicted
-        self.new_pedestrians_coordinates = []
-        # Contain the predicted coordinates or the pdf of the last frame computed
-        new_pedestrians_coordinates = self.pedestrians_coordinates[0]
-
         # Output size of the linear layer
         output_size = 5
         trajectory_size = hparams.obsLen + hparams.predLen
+        # Contain the predicted coordinates or the pdf of the last frame computed
+        new_pedestrians_coordinates = tf.TensorArray(
+            dtype=tf.float32, size=trajectory_size
+        )
 
         # Counter for the adaptive learning rate. Counts the number of batch
         # processed.
@@ -118,11 +116,32 @@ class SocialModel:
             name="Position_estimation/Layer",
         )
 
-        # Decode the coordinates
-        for frame in range(trajectory_size - 1):
+        # ============================ LOOP FUNCTIONS ===========================
+
+        frame = tf.constant(0)
+
+        # If phase is TRAIN, new_pedestrians_coordinates contains the pdf and it
+        # has shape [trajectory_size, max_num_ped]. If phase is SAMPLE
+        # new_pedestrians_coordinates contains the coordinates predicted and it
+        # has shape [trajectory_size, max_num_ped, 2]
+        if phase == TRAIN:
+            new_pedestrians_coordinates = new_pedestrians_coordinates.write(
+                0, tf.zeros(hparams.maxNumPed)
+            )
+        elif phase == SAMPLE:
+            new_pedestrians_coordinates = new_pedestrians_coordinates.write(
+                0, self.pedestrians_coordinates[0]
+            )
+
+        def cond(frame, *args):
+            return frame < (trajectory_size - 1)
+
+        def body(frame, new_pedestrians_coordinates, cell_output, cell_states):
             # Processing the coordinates. Apply the liner layer with relu
             current_coordinates = helper(
-                frame, self.pedestrians_coordinates[frame], new_pedestrians_coordinates
+                frame,
+                self.pedestrians_coordinates[frame],
+                new_pedestrians_coordinates.read(frame),
             )
             pedestrians_coordinates_preprocessed = coordinates_layer(
                 current_coordinates
@@ -154,19 +173,31 @@ class SocialModel:
 
             # Compute the new coordinates or the pdf
             if phase == TRAIN:
-                new_pedestrians_coordinates = position_estimate(
+                coordinates_predicted = position_estimate(
                     layered_output, output_size, self.pedestrians_coordinates[frame + 1]
                 )
             elif phase == SAMPLE:
-                new_pedestrians_coordinates = position_estimate(
-                    layered_output, output_size
-                )
+                coordinates_predicted = position_estimate(layered_output, output_size)
 
             # Append new_coordinates
-            self.new_pedestrians_coordinates.append(new_pedestrians_coordinates)
+            new_pedestrians_coordinates = new_pedestrians_coordinates.write(
+                frame + 1, coordinates_predicted
+            )
+            return frame + 1, new_pedestrians_coordinates, cell_output, cell_states
 
-        # self.new_coordinates has shape [trajectory_size - 1, max_num_ped]
-        self.new_pedestrians_coordinates = tf.stack(self.new_pedestrians_coordinates)
+        # Decode the coordinates
+        _, new_pedestrians_coordinates, _, _ = tf.while_loop(
+            cond,
+            body,
+            loop_vars=[frame, new_pedestrians_coordinates, cell_output, cell_states],
+        )
+
+        # In training phase the list contains the values to minimize. In
+        # sampling phase it has the coordinates predicted. Tensor has shape
+        # [trajectory_size, max_num_ped, 2]
+        self.new_pedestrians_coordinates = new_pedestrians_coordinates.stack(
+            "new_coordinates"
+        )
 
         if phase == TRAIN:
             with tf.variable_scope("Calculate_loss"):

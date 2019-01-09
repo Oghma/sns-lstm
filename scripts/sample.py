@@ -203,8 +203,8 @@ def saveCoords(pred, coordinates_gt, peds_in_sequence, pred_len, coordinates_pat
     the ground truth coordiantes and the number of pedestrian in sequence.
 
     Args:
-      pred: numpy array [num_sequence, trajectory_size - 1,
-        max_num_ped, 2]. The predicted coordinates.
+      pred: numpy array [num_sequence, trajectory_size, max_num_ped, 2]. The
+        predicted coordinates.
       coordinates_gt: numpy array [num_sequence, max_num_ped, trajectory_size,
         2]. The ground truth coordinates.
       peds_in_sequence: numpy array [num_sequence]. The number of pedestrian in
