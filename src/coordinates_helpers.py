@@ -1,5 +1,6 @@
 """Module that defines the coordinates helper. An helper provides the correct
 coordinates according to the traininig or sampling phase and the time-step."""
+import tensorflow as tf
 
 
 def train_helper(step, coordinates_gt, *args):
@@ -36,6 +37,8 @@ def sample_helper(obs_len):
     """
 
     def helper(step, coordinates_gt, coordinates_predicted):
-        return coordinates_predicted if step >= obs_len else coordinates_gt
+        return tf.cond(
+            step >= obs_len, lambda: coordinates_predicted, lambda: coordinates_gt
+        )
 
     return helper
