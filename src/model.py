@@ -44,7 +44,7 @@ class SocialModel:
         trajectory_size = hparams.obsLen + hparams.predLen
         # Contain the predicted coordinates or the pdf of the last frame computed
         new_pedestrians_coordinates = tf.TensorArray(
-            dtype=tf.float32, size=trajectory_size
+            dtype=tf.float32, size=trajectory_size, clear_after_read=False
         )
 
         # Counter for the adaptive learning rate. Counts the number of batch
