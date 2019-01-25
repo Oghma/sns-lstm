@@ -26,17 +26,23 @@ class SocialModel:
         # Create the tensor for the pedestrians of shape
         # [trajectory_size, max_num_ped, 2]
         self.pedestrians_coordinates = dataset.tensors[0]
+        # Create the tensor for the pedestrian relative coordinates of shape
+        # [trajectory_size, max_num_ped, 2]
+        pedestrians_coordinates_rel = dataset.tensors[1]
         # Create the tensor for the ped mask of shape
         # [trajectory_size, max_num_ped, max_num_ped]
-        pedestrians_mask = dataset.tensors[1]
+        pedestrians_mask = dataset.tensors[2]
         # Create the tensor for num_peds_frame
-        self.num_peds_frame = dataset.tensors[2]
+        self.num_peds_frame = dataset.tensors[3]
         # Create the tensor for all pedestrians of shape
         # [trajectory_size, max_num_ped, 2]
-        all_pedestrians_coordinates = dataset.tensors[3]
+        all_pedestrians_coordinates = dataset.tensors[4]
         # Create the for the ped mask of shape
         # [trajectory_size, max_num_ped, max_num_ped]
-        all_pedestrians_mask = dataset.tensors[4]
+        all_pedestrians_mask = dataset.tensors[5]
+        # Create the tensor for the pedestrian relative coordinates of shape
+        # [max_num_ped, 2]
+        new_pedestrians_coordinates_rel = tf.zeros([hparams.maxNumPed, 2])
 
         # Store the parameters
         # Output size of the linear layer
@@ -136,15 +142,23 @@ class SocialModel:
         def cond(frame, *args):
             return frame < (trajectory_size - 1)
 
-        def body(frame, new_pedestrians_coordinates, cell_output, cell_states):
+        def body(
+            frame,
+            new_pedestrians_coordinates,
+            new_pedestrians_coordinates_rel,
+            cell_output,
+            cell_states,
+        ):
             # Processing the coordinates. Apply the liner layer with relu
-            current_coordinates = helper(
+            current_coordinates, current_coordinates_rel = helper(
                 frame,
                 self.pedestrians_coordinates[frame],
+                pedestrians_coordinates_rel[frame],
                 new_pedestrians_coordinates.read(frame),
+                new_pedestrians_coordinates_rel,
             )
             pedestrians_coordinates_preprocessed = coordinates_layer(
-                current_coordinates
+                current_coordinates_rel
             )
 
             # If pooling_module is not None, add the pooling layer
@@ -174,22 +188,40 @@ class SocialModel:
             # Compute the new coordinates or the pdf
             if phase == TRAIN:
                 coordinates_predicted = position_estimate(
-                    layered_output, output_size, self.pedestrians_coordinates[frame + 1]
+                    layered_output, output_size, pedestrians_coordinates_rel[frame + 1]
                 )
             elif phase == SAMPLE:
-                coordinates_predicted = position_estimate(layered_output, output_size)
+                new_pedestrians_coordinates_rel = position_estimate(
+                    layered_output, output_size
+                )
+                coordinates_predicted = (
+                    new_pedestrians_coordinates.read(frame)
+                    + new_pedestrians_coordinates_rel
+                )
 
             # Append new_coordinates
             new_pedestrians_coordinates = new_pedestrians_coordinates.write(
                 frame + 1, coordinates_predicted
             )
-            return frame + 1, new_pedestrians_coordinates, cell_output, cell_states
+            return (
+                frame + 1,
+                new_pedestrians_coordinates,
+                new_pedestrians_coordinates_rel,
+                cell_output,
+                cell_states,
+            )
 
         # Decode the coordinates
-        _, new_pedestrians_coordinates, _, _ = tf.while_loop(
+        _, new_pedestrians_coordinates, _, _, _ = tf.while_loop(
             cond,
             body,
-            loop_vars=[frame, new_pedestrians_coordinates, cell_output, cell_states],
+            loop_vars=[
+                frame,
+                new_pedestrians_coordinates,
+                new_pedestrians_coordinates_rel,
+                cell_output,
+                cell_states,
+            ],
         )
 
         # In training phase the list contains the values to minimize. In
