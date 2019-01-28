@@ -120,19 +120,7 @@ class SocialPooling(Pooling):
 
         """
         super().__init__(hparams)
-
-        with tf.variable_scope("Social_Pooling"):
-            self.grid = tf.Variable(
-                tf.zeros(
-                    [
-                        self.max_num_ped * self.grid_size * self.grid_size,
-                        hparams.rnnSize,
-                    ],
-                    tf.float32,
-                ),
-                trainable=False,
-                name="grid",
-            )
+        self.rnn_size = hparams.rnnSize
 
     def pooling(self, pedestrians, coordinates, states, peds_mask, *args):
         """Compute the social pooling.
@@ -180,15 +168,19 @@ class SocialPooling(Pooling):
         offset = tf.reshape(self._repeat(tf.reshape(offset, [-1, 1])), [-1])
         grid_layout = grid_layout + offset
 
-        with tf.control_dependencies([self.grid.initializer]):
-            scattered = tf.reshape(
-                tf.scatter_add(
-                    self.grid,
-                    tf.boolean_mask(grid_layout, mask),
-                    tf.boolean_mask(states, mask),
-                ),
-                (self.max_num_ped, -1),
-            )
+        indices = tf.boolean_mask(grid_layout, mask)
+
+        scattered = tf.reshape(
+            tf.scatter_nd(
+                tf.expand_dims(indices, 1),
+                tf.boolean_mask(states, mask),
+                shape=[
+                    self.max_num_ped * self.grid_size * self.grid_size,
+                    self.rnn_size,
+                ],
+            ),
+            (self.max_num_ped, -1),
+        )
 
         return self.pooling_layer(scattered)
 
@@ -205,18 +197,6 @@ class OccupancyPooling(Pooling):
 
         """
         super().__init__(hparams)
-
-        with tf.variable_scope("Social_Pooling"):
-            self.grid = tf.Variable(
-                tf.zeros(
-                    [self.max_num_ped * self.grid_size * self.grid_size, 1], tf.float32
-                ),
-                trainable=False,
-                name="grid",
-            )
-            self.updates = tf.ones(
-                [self.max_num_ped * self.max_num_ped, 1], name="updates"
-            )
 
     def pooling(self, pedestrians, coordinates, states, peds_mask, *args):
         """Compute the occupancy pooling.
@@ -262,15 +242,16 @@ class OccupancyPooling(Pooling):
         offset = tf.reshape(self._repeat(tf.reshape(offset, [-1, 1])), [-1])
         grid_layout = grid_layout + offset
 
-        with tf.control_dependencies([self.grid.initializer]):
-            scattered = tf.reshape(
-                tf.scatter_add(
-                    self.grid,
-                    tf.boolean_mask(grid_layout, mask),
-                    tf.boolean_mask(self.updates, mask),
-                ),
-                (self.max_num_ped, -1),
-            )
+        indices = tf.boolean_mask(grid_layout, mask)
+
+        scattered = tf.reshape(
+            tf.scatter_nd(
+                tf.expand_dims(indices, 1),
+                tf.boolean_mask(states, mask),
+                shape=[self.max_num_ped * self.grid_size * self.grid_size, 1],
+            ),
+            (self.max_num_ped, -1),
+        )
 
         return self.pooling_layer(scattered)
 
