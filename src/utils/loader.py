@@ -72,16 +72,18 @@ class DataLoader:
 
         Returns:
             Generator object that contains a list containing sequences of
-              trajectories of size batch_size a list containing the associated
-              grid layer of size batch_size a list containing the number of
-              pedestrian in the sequences, a list containing all pedestrians in
-              the sequence and a list containing the grid layer with all
-              pedestrians.
+              trajectories of size batch_size, a list containing sequences of
+              relative trajectories of size batch_size, a list containing the
+              associated grid layer of size batch_size a list containing the
+              number of pedestrian in the sequences, a list containing all
+              pedestrians in the sequence and a list containing the grid layer
+              with all pedestrians.
 
         """
         it = self.next_sequence()
         for batch in range(self.num_batches):
             batch = []
+            batch_rel = []
             grid_batch = []
             peds_in_batch = []
             all_peds = []
@@ -90,20 +92,21 @@ class DataLoader:
             for size in range(self.batch_size):
                 data = next(it)
                 batch.append(data[0])
-                grid_batch.append(data[1])
-                peds_in_batch.append(data[2])
-                all_peds.append(data[3])
-                all_peds_mask.append(data[4])
-            yield batch, grid_batch, peds_in_batch, all_peds, all_peds_mask
+                batch_rel.append(data[1])
+                grid_batch.append(data[2])
+                peds_in_batch.append(data[3])
+                all_peds.append(data[4])
+                all_peds_mask.append(data[5])
+            yield batch, batch_rel, grid_batch, peds_in_batch, all_peds, all_peds_mask
 
     def next_sequence(self):
         """Generator method that returns an iterator pointing to the next sequence.
 
         Returns:
-          Generator object that contains a sequence of trajectories, the
-            associated grid layer the number of pedestrian in the sequence, a
-            list containing all pedestrians in the sequence and a list
-            containing the grid layer with all pedestrians.
+          Generator object that contains a sequence of trajectories, a sequence
+            of relative trajectories, the associated grid layer the number of
+            pedestrian in the sequence, a list containing all pedestrians in the
+            sequence and a list containing the grid layer with all pedestrians.
 
         """
         # Iterate through all sequences
@@ -111,11 +114,22 @@ class DataLoader:
             # Every dataset
             for idx_s, trajectories in enumerate(dataset):
                 all_peds = self.__trajectories_all_peds[idx_d][idx_s]
+                all_peds_moved = np.moveaxis(all_peds[:, :, [2, 3]], 1, 0)
+                sequence_rel = np.zeros(
+                    [self.trajectory_size, self.max_num_ped, 2], float
+                )
                 sequence, grid, num_peds, all_peds_mask = self.__get_sequence(
                     trajectories, all_peds[:, :, 1]
                 )
-                all_peds_moved = np.moveaxis(all_peds[:, :, [2, 3]], 1, 0)
-                yield (sequence, grid, num_peds, all_peds_moved, all_peds_mask)
+                sequence_rel[1:] = sequence[1:] - sequence[:-1]
+                yield (
+                    sequence,
+                    sequence_rel,
+                    grid,
+                    num_peds,
+                    all_peds_moved,
+                    all_peds_mask,
+                )
 
     def __load_data(self, delimiter):
         """Load the datasets and define the list __frames.
@@ -183,13 +197,8 @@ class DataLoader:
                 for ped in peds:
                     # Get the frames where ped appear
                     frames = sequence[sequence[:, 1] == ped, :]
-                    # Check the trajectory is long enough and the pedestrian is
-                    # not standing all time
-                    if (
-                        frames.shape[0] == self.trajectory_size
-                        and not np.all(frames[:, 2] == frames[0, 2])
-                        and not np.all(frames[:, 3] == frames[0, 3])
-                    ):
+                    # Check the trajectory is long enough
+                    if frames.shape[0] == self.trajectory_size:
                         traj_frame.append(frames)
                 # If no trajectory is long enough traj_frame is empty. Otherwise
                 if traj_frame:
@@ -283,8 +292,16 @@ class DataLoader:
 
     def __type_and_shape(self):
         """Define the type and the shape of the arrays that tensorflow will use"""
-        self.output_types = (tf.float32, tf.bool, tf.int32, tf.float32, tf.bool)
+        self.output_types = (
+            tf.float32,
+            tf.float32,
+            tf.bool,
+            tf.int32,
+            tf.float32,
+            tf.bool,
+        )
         self.shape = (
+            tf.TensorShape([self.trajectory_size, self.max_num_ped, 2]),
             tf.TensorShape([self.trajectory_size, self.max_num_ped, 2]),
             tf.TensorShape([self.trajectory_size, self.max_num_ped, self.max_num_ped]),
             tf.TensorShape([]),

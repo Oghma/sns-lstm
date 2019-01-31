@@ -3,19 +3,21 @@ coordinates according to the traininig or sampling phase and the time-step."""
 import tensorflow as tf
 
 
-def train_helper(step, coordinates_gt, *args):
+def train_helper(step, coordinates_gt, coordinates_gt_rel, *args):
     """Helper used in training phase. Returns the ground truth coordinates.
 
     Args:
       step: int. The current time-step.
       coordinates_gt: tensor of shape [max_num_ped, 2]. The ground truth
         coordinates.
+      coordinates_gt_rel: tensor of shape [max_num_ped, 2]. The ground truth
+        relative coordinates.
 
     Returns:
       In training phase always returns the ground truth coordinates.
 
     """
-    return coordinates_gt
+    return coordinates_gt, coordinates_gt_rel
 
 
 def sample_helper(obs_len):
@@ -36,9 +38,17 @@ def sample_helper(obs_len):
 
     """
 
-    def helper(step, coordinates_gt, coordinates_predicted):
+    def helper(
+        step,
+        coordinates_gt,
+        coordinates_gt_rel,
+        coordinates_predicted,
+        coordinates_predicted_rel,
+    ):
         return tf.cond(
-            step >= obs_len, lambda: coordinates_predicted, lambda: coordinates_gt
+            step >= obs_len,
+            lambda: (coordinates_predicted, coordinates_predicted_rel),
+            lambda: (coordinates_gt, coordinates_gt_rel),
         )
 
     return helper
