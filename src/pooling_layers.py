@@ -26,11 +26,10 @@ class Pooling(ABC):
         )
 
     @abstractmethod
-    def pooling(self, pedestrians, coordinates, states, peds_mask, *args):
+    def pooling(self, coordinates, states, peds_mask):
         """Compute the pooling.
 
         Args:
-          pedestrians: tensor of shape [max_num_ped, 2]. Pedestrians.
           coordinates: tensor of shape [max_num_ped, 2]. Coordinates.
           states: tensor of shape [max_num_ped, rnn_size]. Cell states of the
             LSTM.
@@ -122,11 +121,10 @@ class SocialPooling(Pooling):
         super().__init__(hparams)
         self.rnn_size = hparams.rnnSize
 
-    def pooling(self, pedestrians, coordinates, states, peds_mask, *args):
+    def pooling(self, coordinates, states, peds_mask):
         """Compute the social pooling.
 
         Args:
-          pedestrians: tensor of shape [max_num_ped, 2]. Pedestrians.
           coordinates: tensor of shape [max_num_ped, 2]. Coordinates.
           states: tensor of shape [max_num_ped, rnn_size]. Cell states of the
             LSTM.
@@ -136,7 +134,7 @@ class SocialPooling(Pooling):
           The social pooling layer
 
         """
-        top_left, bottom_right = self._get_bounds(pedestrians)
+        top_left, bottom_right = self._get_bounds(coordinates)
 
         # Repeat the coordinates in order to have P1, P2, P3, P1, P2, P3
         coordinates = tf.tile(coordinates, (self.max_num_ped, 1))
@@ -198,11 +196,10 @@ class OccupancyPooling(Pooling):
         """
         super().__init__(hparams)
 
-    def pooling(self, pedestrians, coordinates, states, peds_mask, *args):
+    def pooling(self, coordinates, states, peds_mask):
         """Compute the occupancy pooling.
 
         Args:
-          pedestrians: tensor of shape [max_num_ped, 2]. Pedestrians.
           coordinates: tensor of shape [max_num_ped, 2]. Coordinates.
           states: tensor of shape [max_num_ped, rnn_size]. Cell states of the
             LSTM.
@@ -212,7 +209,7 @@ class OccupancyPooling(Pooling):
           The occupancy pooling layer
 
         """
-        top_left, bottom_right = self._get_bounds(pedestrians)
+        top_left, bottom_right = self._get_bounds(coordinates)
 
         # Repeat the coordinates in order to have P1, P2, P3, P1, P2, P3
         coordinates = tf.tile(coordinates, (self.max_num_ped, 1))
@@ -265,38 +262,26 @@ class CombinedPooling:
 
         Args:
           hparams: An HParams instance. hparams must contains grid_size,
-            neighborhood_size, max_num_ped, embedding_size, rnn_size, layers and
-            all_peds values.
+            neighborhood_size, max_num_ped, embedding_size, rnn_size, layers
+            values.
 
         """
         self.__layers = []
-        self.__all_peds_layers = []
 
         for layer in hparams.poolingModule:
             if layer == "social":
-                social = SocialPooling(hparams)
-                if hparams.allPeds:
-                    self.__all_peds_layers.append(social)
-                else:
-                    self.__layers.append(social)
+                self.__layers.append(SocialPooling(hparams))
             elif layer == "occupancy":
-                self.__all_peds_layers.append(OccupancyPooling(hparams))
+                self.__layers.append(OccupancyPooling(hparams))
 
-    def pooling(
-        self, pedestrians, coordinates, states, peds_mask, all_peds, all_peds_mask
-    ):
+    def pooling(self, coordinates, states, peds_mask):
         """Compute the combined pooling.
 
         Args:
-          pedestrians: tensor of shape [max_num_ped, 2]. Pedestrians.
           coordinates: tensor of shape [max_num_ped, 2]. Coordinates.
           states: tensor of shape [max_num_ped, rnn_size]. Cell states of the
             LSTM.
           peds_mask: tensor of shape [max_num_ped, max_num_ped]. Grid layer.
-          all_peds: tensor of shape [max_num_ped, embedding_size]. Coordinates
-            of all pedestrians.
-          all_peds_mask: tensor of shape [max_num_ped, max_num_ped]. Mask of all
-            pedestrians.
 
         Returns:
           The pooling layer
@@ -305,8 +290,5 @@ class CombinedPooling:
         pooled = []
         for layer in self.__layers:
             pooled.append(layer.pooling(pedestrians, coordinates, states, peds_mask))
-
-        for layer in self.__all_peds_layers:
-            pooled.append(layer.pooling(pedestrians, all_peds, states, all_peds_mask))
 
         return tf.concat(pooled, 1)
