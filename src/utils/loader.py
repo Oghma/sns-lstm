@@ -71,13 +71,11 @@ class DataLoader:
         """Generator method that returns an iterator pointing to the next batch.
 
         Returns:
-            Generator object that contains a list containing sequences of
-              trajectories of size batch_size, a list containing sequences of
-              relative trajectories of size batch_size, a list containing the
-              associated grid layer of size batch_size a list containing the
-              number of pedestrian in the sequences, a list containing all
-              pedestrians in the sequence and a list containing the grid layer
-              with all pedestrians.
+            Generator object that has a list of trajectory sequences of size
+              batch_size, a list of relative trajectory sequences of size
+              batch_size, a list containing the associated grid layer of size
+              batch_size and list with the number of pedestrian in each
+              sequence.
 
         """
         it = self.next_sequence()
@@ -85,58 +83,47 @@ class DataLoader:
             batch = []
             batch_rel = []
             grid_batch = []
-            peds_in_batch = []
-            all_peds = []
-            all_peds_mask = []
+            peds_batch = []
 
             for size in range(self.batch_size):
                 data = next(it)
                 batch.append(data[0])
                 batch_rel.append(data[1])
                 grid_batch.append(data[2])
-                peds_in_batch.append(data[3])
-                all_peds.append(data[4])
-                all_peds_mask.append(data[5])
-            yield batch, batch_rel, grid_batch, peds_in_batch, all_peds, all_peds_mask
+                peds_batch.append(data[3])
+
+            yield batch, batch_rel, grid_batch, peds_batch
 
     def next_sequence(self):
         """Generator method that returns an iterator pointing to the next sequence.
 
         Returns:
-          Generator object that contains a sequence of trajectories, a sequence
-            of relative trajectories, the associated grid layer the number of
-            pedestrian in the sequence, a list containing all pedestrians in the
-            sequence and a list containing the grid layer with all pedestrians.
+          Generator object that contains a trajectory sequence, a relative
+            trajectory sequence, the associated grid layer and the number of
+            pedestrian in the sequence.
 
         """
         # Iterate through all sequences
         for idx_d, dataset in enumerate(self.__trajectories):
             # Every dataset
             for idx_s, trajectories in enumerate(dataset):
-                all_peds = self.__trajectories_all_peds[idx_d][idx_s]
-                all_peds_moved = np.moveaxis(all_peds[:, :, [2, 3]], 1, 0)
+                sequence, grid = self.__get_sequence(trajectories)
+
+                # Create the relative coordinates
                 sequence_rel = np.zeros(
                     [self.trajectory_size, self.max_num_ped, 2], float
                 )
-                sequence, grid, num_peds, all_peds_mask = self.__get_sequence(
-                    trajectories, all_peds[:, :, 1]
-                )
                 sequence_rel[1:] = sequence[1:] - sequence[:-1]
-                yield (
-                    sequence,
-                    sequence_rel,
-                    grid,
-                    num_peds,
-                    all_peds_moved,
-                    all_peds_mask,
-                )
+                num_peds = self.__num_peds[idx_d][idx_s]
+
+                yield (sequence, sequence_rel, grid, num_peds)
 
     def __load_data(self, delimiter):
         """Load the datasets and define the list __frames.
 
         Load the datasets and define the list __frames wich contains all the
         frames of the datasets. __frames has shape [num_datasets,
-        num_frames_in_dataset, num_peds_in_frame, 4] where 4 is frameID, pedID,
+        num_frames_dataset, num_peds_frame, 4] where 4 is frameID, pedID,
         x and y.
 
         Args:
@@ -169,49 +156,51 @@ class DataLoader:
         """Preprocess the datasets and define the number of sequences and batches.
 
         The method iterates on __frames saving on the list __trajectories only
-        the trajectories with length trajectory_size. The list
-        __trajectories_all_peds preserves all the trajectories inside the
-        sequence.
+        the trajectories with length trajectory_size.
 
         """
         # Keep only the trajectories trajectory_size long
         self.__trajectories = []
-        self.__trajectories_all_peds = []
+        self.__num_peds = []
         self.num_sequences = 0
 
         for dataset in self.__frames:
             # Initialize the array of trajectories for the current dataset.
             trajectories = []
-            trajectories_all_peds = []
+            num_peds = []
             frame_size = len(dataset)
             i = 0
 
             # Each trajectory contains only frames of a dataset
             while i + self.trajectory_size < frame_size:
-                sequences = dataset[i : i + self.trajectory_size]
+                sequence = dataset[i : i + self.trajectory_size]
                 # Get the pedestrians in the first frame
-                peds = np.unique(sequences[0][:, 1])
+                peds = np.unique(sequence[0][:, 1])
                 # Check if the trajectory of pedestrian is long enough.
-                sequence = np.concatenate(sequences, axis=0)
+                sequence = np.concatenate(sequence, axis=0)
                 traj_frame = []
                 for ped in peds:
                     # Get the frames where ped appear
-                    frames = sequence[sequence[:, 1] == ped, :]
+                    frames = sequence[sequence[:, 1] == ped]
                     # Check the trajectory is long enough
                     if frames.shape[0] == self.trajectory_size:
                         traj_frame.append(frames)
                 # If no trajectory is long enough traj_frame is empty. Otherwise
                 if traj_frame:
-                    trajectories.append(traj_frame)
-                    trajectories_all_peds.append(self.__all_peds(sequences))
+                    trajectories_frame, peds_frame = self.__create_sequence(
+                        traj_frame, sequence
+                    )
+                    trajectories.append(trajectories_frame)
+                    num_peds.append(peds_frame)
                     self.num_sequences += 1
                 # If skip is True, update the index with a random value
                 if self.skip is True:
                     i += random.randint(0, self.trajectory_size)
                 else:
                     i += self.skip
+
             self.__trajectories.append(trajectories)
-            self.__trajectories_all_peds.append(trajectories_all_peds)
+            self.__num_peds.append(num_peds)
 
         # num_batches counts only full batches. It discards the remaining
         # sequences
@@ -219,92 +208,96 @@ class DataLoader:
         logging.info("There are {} sequences in loader".format(self.num_sequences))
         logging.info("There are {} batches in loader".format(self.num_batches))
 
-    def __get_sequence(self, trajectories, all_peds):
-        """Returns a sequence of trajectories of shape [trajectory_size, maxNumPed, 2]
+    def __get_sequence(self, trajectories):
+        """Returns a tuple containing a trajectory sequence and the grid mask.
 
         Args:
           trajectories: list of numpy array. Each array is a trajectory.
-          all_peds: numpy array of shape [max_num_ped, trajectory_size]. Array
-            that contains the ID of all pedestrians.
 
         Returns:
           tuple containing a numpy array with shape [trajectory_size,
-            max_num_ped, 2] that contains all the trajectories, a numpy array
+            max_num_ped, 2] that contains the trajectories and a numpy array
             with shape [trajectory_size, max_num_ped, max_num_ped] that is the
-            grid layer, the number of pedestrian in the sequence and a numpy
-            array with shape [trajectory_size, max_num_ped, max_num_ped] that is
-            the grid layer of all pedestrians.
+            grid layer.
 
         """
+        num_peds_sequence = len(trajectories)
         sequence = np.zeros((self.max_num_ped, self.trajectory_size, 2))
-        grid = np.zeros(
-            (self.max_num_ped, self.max_num_ped, self.trajectory_size), dtype=bool
-        )
+        grid = np.zeros((self.max_num_ped, self.trajectory_size), dtype=bool)
 
-        num_peds_in_sequence = len(trajectories)
-        peds_in_sequence = map(lambda x: int(x[0, 1]), trajectories)
-        all_peds_mask = np.repeat(
-            np.expand_dims(all_peds, axis=0), self.max_num_ped, axis=0
-        )
-
-        for index, trajectory in enumerate(trajectories):
-            sequence[index] = trajectory[:, [2, 3]]
+        sequence[:num_peds_sequence] = trajectories[:, :, [2, 3]]
 
         # Create the grid layer. Set to True only the pedestrians that are in
-        # the sequence
-        grid[:num_peds_in_sequence, :num_peds_in_sequence] = True
+        # the sequence. A pedestrian is in the sequence if its frameID is not 0
+        grid[:num_peds_sequence] = trajectories[:, :, 0]
+        # Create a grid for all the pedestrians
+        grid = np.tile(grid, (self.max_num_ped, 1, 1))
         # Grid layer ignores the pedestrian itself
-        for ped in range(num_peds_in_sequence):
+        for ped in range(num_peds_sequence):
             grid[ped, ped] = False
 
-        # Create the all_peds_mask
-        for idx, ped in enumerate(peds_in_sequence):
-            all_peds_mask[idx, all_peds_mask[idx] == ped + 1] = 0
-        all_peds_mask = all_peds_mask.astype(bool, copy=False)
-
-        # Chane shape of the arrays. From [max_num_ped, trajectory_size] to
+        # Change shape of the arrays. From [max_num_ped, trajectory_size] to
         # [trajectory_size, max_num_ped]
         sequence_moved = np.moveaxis(sequence, 1, 0)
         grid_moved = np.moveaxis(grid, 2, 0)
-        all_peds_mask_moved = np.moveaxis(all_peds_mask, 2, 0)
 
-        return sequence_moved, grid_moved, num_peds_in_sequence, all_peds_mask_moved
+        return sequence_moved, grid_moved
 
-    def __all_peds(self, sequences):
-        """Create a ndarray containing the coordinates of all pedestrians in the
-        sequence.
+    def __create_sequence(self, trajectories_full, sequence):
+        """Create an array with the trajectories contained in a dataset slice.
 
         Args:
-          sequences: list of ndarray containing the pedestrian in a single frame.
+          trajectories_full: list that contains the trajectories long
+            trajectory_size of the dataset slice.
+          sequence: list that contains the remaining trajectories of the dataset
+            slice.
 
         Returns:
-          ndarray of shape [max_num_ped, trajectory_size, 2] containing the
-            coordinates of all pedestrians in the sequence.
+          tuple containing the ndarray with the trajectories of the dataset
+            slice and the number of pedestrians thate are trajectory_size long
+            in the dataset slice. In the first positions of the ndarray there
+            are the trajectories long enough. The shape of the ndarray is
+            [peds_sequence, trajectory_size, 4].
 
         """
-        sequence = np.zeros((self.max_num_ped, self.trajectory_size, 4))
-        for frame in range(self.trajectory_size):
-            peds = len(sequences[frame])
-            sequence[:peds, frame] = sequences[frame]
-            # Some pedestrains have ID 0. Add 1 to start with ID 1
-            sequence[:peds, frame, 1] += 1
-        return sequence
+        trajectories_full = np.array(trajectories_full)
+        peds_sequence = np.unique(sequence[:, 1])
+        peds_trajectories = np.unique(trajectories_full[:, :, 1])
+        frames_id = np.unique(sequence[:, 0])
+        # Create the array that will contain the trajectories
+        trajectories = np.zeros((len(peds_sequence), self.trajectory_size, 4))
+
+        # Copy trajectories_full in the first len(peds_trajectories) rows
+        trajectories[: len(peds_trajectories)] = trajectories_full
+        # Remove the peds that are in peds_trajectories
+        peds_sequence = np.delete(
+            peds_sequence, np.searchsorted(peds_sequence, peds_trajectories)
+        )
+        # Create a lookup table with the frames id and their position in the
+        # sequence
+        lookup_frames = {}
+        for i, frame in enumerate(frames_id):
+            lookup_frames[frame] = i
+
+        # Add the remaining peds
+        for i, ped in enumerate(peds_sequence, len(peds_trajectories)):
+            # Get the indexes where the pedsID is equal to ped
+            positions = np.where(sequence[:, 1] == ped)[0]
+            # Use the lookup table to find out where the pedestrian trajectory
+            # begins and end in the sequence
+            start = lookup_frames[sequence[positions][0, 0]]
+            end = lookup_frames[sequence[positions][-1, 0]] + 1
+            # Copy the pedestrian trajectory inside the sequence
+            trajectories[i, start:end] = sequence[positions]
+
+        return trajectories, len(peds_trajectories)
 
     def __type_and_shape(self):
         """Define the type and the shape of the arrays that tensorflow will use"""
-        self.output_types = (
-            tf.float32,
-            tf.float32,
-            tf.bool,
-            tf.int32,
-            tf.float32,
-            tf.bool,
-        )
+        self.output_types = (tf.float32, tf.float32, tf.bool, tf.int32)
         self.shape = (
             tf.TensorShape([self.trajectory_size, self.max_num_ped, 2]),
             tf.TensorShape([self.trajectory_size, self.max_num_ped, 2]),
             tf.TensorShape([self.trajectory_size, self.max_num_ped, self.max_num_ped]),
             tf.TensorShape([]),
-            tf.TensorShape([self.trajectory_size, self.max_num_ped, 2]),
-            tf.TensorShape([self.trajectory_size, self.max_num_ped, self.max_num_ped]),
         )
