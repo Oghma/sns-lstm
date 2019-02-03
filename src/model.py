@@ -34,12 +34,6 @@ class SocialModel:
         pedestrians_mask = dataset.tensors[2]
         # Create the tensor for num_peds_frame
         self.num_peds_frame = dataset.tensors[3]
-        # Create the tensor for all pedestrians of shape
-        # [trajectory_size, max_num_ped, 2]
-        all_pedestrians_coordinates = dataset.tensors[4]
-        # Create the for the ped mask of shape
-        # [trajectory_size, max_num_ped, max_num_ped]
-        all_pedestrians_mask = dataset.tensors[5]
         # Create the tensor for the pedestrian relative coordinates of shape
         # [max_num_ped, 2]
         new_pedestrians_coordinates_rel = tf.zeros([hparams.maxNumPed, 2])
@@ -164,12 +158,7 @@ class SocialModel:
             # If pooling_module is not None, add the pooling layer
             if pooling_module is not None:
                 pooling_output = pooling_module(
-                    current_coordinates,
-                    current_coordinates,
-                    cell_output,
-                    pedestrians_mask[frame],
-                    all_pedestrians_coordinates[frame],
-                    all_pedestrians_mask[frame],
+                    current_coordinates, cell_output, pedestrians_mask[frame]
                 )
                 cell_input = tf.concat(
                     [pedestrians_coordinates_preprocessed, pooling_output],
