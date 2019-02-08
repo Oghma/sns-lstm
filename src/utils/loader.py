@@ -73,7 +73,7 @@ class DataLoader:
         Returns:
             Generator object that has a list of trajectory sequences of size
               batch_size, a list of relative trajectory sequences of size
-              batch_size, a list containing the associated grid layer of size
+              batch_size, a list containing the mask for the grid layer of size
               batch_size, a list with the number of pedestrian in each sequence
               and a list containing the mask for the loss function.
 
@@ -82,7 +82,7 @@ class DataLoader:
         for batch in range(self.num_batches):
             batch = []
             batch_rel = []
-            grid_batch = []
+            mask_batch = []
             peds_batch = []
             loss_batch = []
 
@@ -90,18 +90,18 @@ class DataLoader:
                 data = next(it)
                 batch.append(data[0])
                 batch_rel.append(data[1])
-                grid_batch.append(data[2])
+                mask_batch.append(data[2])
                 peds_batch.append(data[3])
                 loss_batch.append(data[4])
 
-            yield batch, batch_rel, grid_batch, peds_batch, loss_batch
+            yield batch, batch_rel, mask_batch, peds_batch, loss_batch
 
     def next_sequence(self):
         """Generator method that returns an iterator pointing to the next sequence.
 
         Returns:
           Generator object that contains a trajectory sequence, a relative
-            trajectory sequence, the associated grid layer, the number of
+            trajectory sequence, the mask for the grid layer, the number of
             pedestrian in the sequence and the mask for the loss function.
 
         """
@@ -109,7 +109,7 @@ class DataLoader:
         for idx_d, dataset in enumerate(self.__trajectories):
             # Every dataset
             for idx_s, trajectories in enumerate(dataset):
-                sequence, grid, loss_mask = self.__get_sequence(trajectories)
+                sequence, mask, loss_mask = self.__get_sequence(trajectories)
 
                 # Create the relative coordinates
                 sequence_rel = np.zeros(
@@ -118,7 +118,7 @@ class DataLoader:
                 sequence_rel[1:] = sequence[1:] - sequence[:-1]
                 num_peds = self.__num_peds[idx_d][idx_s]
 
-                yield (sequence, sequence_rel, grid, num_peds, loss_mask)
+                yield (sequence, sequence_rel, mask, num_peds, loss_mask)
 
     def __load_data(self, delimiter):
         """Load the datasets and define the list __frames.
@@ -211,7 +211,8 @@ class DataLoader:
         logging.info("There are {} batches in loader".format(self.num_batches))
 
     def __get_sequence(self, trajectories):
-        """Returns a tuple containing a trajectory sequence and the grid mask.
+        """Returns a tuple containing a trajectory sequence, the mask for the grid layer
+        and the mask for the loss function.
 
         Args:
           trajectories: list of numpy array. Each array is a trajectory.
@@ -219,35 +220,36 @@ class DataLoader:
         Returns:
           tuple containing a numpy array with shape [trajectory_size,
             max_num_ped, 2] that contains the trajectories, a numpy array with
-            shape [trajectory_size, max_num_ped, max_num_ped] that is the grid
-            layer and a numpy array with shape [trajectory_size, max_num_ped]
-            that is the mask for the loss function.
+            shape [trajectory_size, max_num_ped, max_num_ped] that is the mask
+            for the grid layer and a numpy array with shape [trajectory_size,
+            max_num_ped] that is the mask for the loss function.
 
         """
         num_peds_sequence = len(trajectories)
         sequence = np.zeros((self.max_num_ped, self.trajectory_size, 2))
-        grid = np.zeros((self.max_num_ped, self.trajectory_size), dtype=bool)
+        mask = np.zeros((self.max_num_ped, self.trajectory_size), dtype=bool)
 
         sequence[:num_peds_sequence] = trajectories[:, :, [2, 3]]
 
-        # Create the grid layer. Set to True only the pedestrians that are in
-        # the sequence. A pedestrian is in the sequence if its frameID is not 0
-        grid[:num_peds_sequence] = trajectories[:, :, 0]
+        # Create the mask for the grid layer. Set to True only the pedestrians
+        # that are in the sequence. A pedestrian is in the sequence if its
+        # frameID is not 0
+        mask[:num_peds_sequence] = trajectories[:, :, 0]
         # Create the mask for the loss function
-        loss_mask = grid
-        # Create a grid for all the pedestrians
-        grid = np.tile(grid, (self.max_num_ped, 1, 1))
-        # Grid layer ignores the pedestrian itself
+        loss_mask = mask
+        # Create the mask for all the pedestrians
+        mask = np.tile(mask, (self.max_num_ped, 1, 1))
+        # The mask ignores the pedestrian itself
         for ped in range(num_peds_sequence):
-            grid[ped, ped] = False
+            mask[ped, ped] = False
 
         # Change shape of the arrays. From [max_num_ped, trajectory_size] to
         # [trajectory_size, max_num_ped]
         sequence_moved = np.moveaxis(sequence, 1, 0)
-        grid_moved = np.moveaxis(grid, 2, 0)
+        mask_moved = np.moveaxis(mask, 2, 0)
         loss_moved = np.moveaxis(loss_mask, 1, 0)
 
-        return sequence_moved, grid_moved, loss_moved
+        return sequence_moved, mask_moved, loss_moved
 
     def __create_sequence(self, trajectories_full, sequence):
         """Create an array with the trajectories contained in a dataset slice.
