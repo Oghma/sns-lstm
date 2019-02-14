@@ -34,12 +34,9 @@ class SocialModel:
         pedestrians_mask = dataset.tensors[2]
         # Create the tensor for num_peds_frame
         self.num_peds_frame = dataset.tensors[3]
-        # Create the tensor for all pedestrians of shape
-        # [trajectory_size, max_num_ped, 2]
-        all_pedestrians_coordinates = dataset.tensors[4]
-        # Create the for the ped mask of shape
-        # [trajectory_size, max_num_ped, max_num_ped]
-        all_pedestrians_mask = dataset.tensors[5]
+        # Create the tensor for the loss mask of shape
+        # [trajectory_size, max_num_ped]
+        loss_mask = dataset.tensors[4]
         # Create the tensor for the pedestrian relative coordinates of shape
         # [max_num_ped, 2]
         new_pedestrians_coordinates_rel = tf.zeros([hparams.maxNumPed, 2])
@@ -164,12 +161,7 @@ class SocialModel:
             # If pooling_module is not None, add the pooling layer
             if pooling_module is not None:
                 pooling_output = pooling_module(
-                    current_coordinates,
-                    current_coordinates,
-                    cell_output,
-                    pedestrians_mask[frame],
-                    all_pedestrians_coordinates[frame],
-                    all_pedestrians_mask[frame],
+                    current_coordinates, cell_output, pedestrians_mask[frame]
                 )
                 cell_input = tf.concat(
                     [pedestrians_coordinates_preprocessed, pooling_output],
@@ -233,11 +225,22 @@ class SocialModel:
 
         if phase == TRAIN:
             with tf.variable_scope("Calculate_loss"):
-                self.loss = loss_function(
-                    self.new_pedestrians_coordinates[
-                        -hparams.predLen :, : self.num_peds_frame
-                    ]
+                # boolean_mask produces a warning because a sparse IndexedSlices
+                # is implicitly converted to a dense tensor. This typically
+                # happens when one operation (usually tf.gather())
+                # backpropagates a sparse gradient, but the op that receives it
+                # does not have a specialized gradient function that can handle
+                # sparse gradients. As a result, TensorFlow automatically
+                # densifies the tf.IndexedSlices, which can have a devastating
+                # effect on performance if the tensor is large. To fix the
+                # problem we use dynamic_partition. The values for the loss
+                # function are in the second list
+                loss_values = tf.dynamic_partition(
+                    self.new_pedestrians_coordinates[-hparams.predLen :],
+                    loss_mask[-hparams.predLen :],
+                    2,
                 )
+                self.loss = loss_function(loss_values[1])
                 self.loss = tf.div(self.loss, tf.cast(self.num_peds_frame, tf.float32))
 
             # Add weights regularization
