@@ -76,7 +76,8 @@ neighborhoodSize: 2
 rnnSize: 128
 # Dimension of the embedding layer 
 embeddingSize: 64
-# Type of pooling module to use. Two option supported: social or null
+# Type of pooling module to use. Option supported: social, occupancy, combined
+# or null. Combined pooling is a list of the other pooling layers
 poolingModule: "social"
 
 # -----------------------------------------------------------------------------
