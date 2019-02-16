@@ -24,6 +24,7 @@ class TrajectoriesDataset:
         train_loader,
         val_loader=None,
         batch=False,
+        shuffle=True,
         batch_size=10,
         prefetch_size=1000,
     ):
@@ -54,6 +55,12 @@ class TrajectoriesDataset:
                 val_dataset = tf.data.Dataset.from_generator(
                     val_loader.next_sequence, val_loader.output_types, val_loader.shape
                 )
+
+        # If shuffle is True, add the shuffle option to the dataset
+        if shuffle:
+            train_dataset = train_dataset.shuffle(prefetch_size)
+            if val_loader is not None:
+                val_dataset = val_dataset.shuffle(prefetch_size)
 
         # If batch is True, self.tensors will contain a batch of sequences and
         # not a single sequence

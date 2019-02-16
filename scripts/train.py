@@ -90,6 +90,7 @@ def main():
             train_loader,
             val_loader=val_loader,
             batch=False,
+            shuffle=hparams.shuffle,
             prefetch_size=hparams.prefetchSize,
         )
 

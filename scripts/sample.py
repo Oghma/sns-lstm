@@ -106,6 +106,7 @@ def main():
             test_loader,
             val_loader=None,
             batch=False,
+            shuffle=hparams.shuffle,
             prefetch_size=hparams.prefetchSize,
         )
 
