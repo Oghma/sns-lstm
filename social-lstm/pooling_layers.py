@@ -289,6 +289,6 @@ class CombinedPooling:
         """
         pooled = []
         for layer in self.__layers:
-            pooled.append(layer.pooling(pedestrians, coordinates, states, peds_mask))
+            pooled.append(layer.pooling(coordinates, states, peds_mask))
 
         return tf.concat(pooled, 1)
