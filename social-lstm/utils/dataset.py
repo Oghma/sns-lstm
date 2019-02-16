@@ -25,7 +25,7 @@ class TrajectoriesDataset:
         val_loader=None,
         batch=False,
         batch_size=10,
-        prefetch_size=100,
+        prefetch_size=1000,
     ):
         """Constructor of the TrajectoriesDataset class.
 
