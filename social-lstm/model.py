@@ -37,6 +37,11 @@ class SocialModel:
         # Create the tensor for the loss mask of shape
         # [trajectory_size, max_num_ped]
         loss_mask = dataset.tensors[4]
+        # Create the tensor for the navigation map of shape
+        # [navigation_width, navigation_height]
+        navigation_map = dataset.tensors[5]
+        # Create the tensor for the upper left-most point in the dataset
+        top_left_dataset = dataset.tensors[6]
         # Create the tensor for the pedestrian relative coordinates of shape
         # [max_num_ped, 2]
         new_pedestrians_coordinates_rel = tf.zeros([hparams.maxNumPed, 2])
@@ -78,6 +83,10 @@ class SocialModel:
         elif hparams.poolingModule == "occupancy":
             logging.info("Creating the {} pooling".format(hparams.poolingModule))
             pooling_module = pooling_layers.OccupancyPooling(hparams).pooling
+
+        elif hparams.poolingModule == "navigation":
+            logging.info("Creating the {} pooling".format(hparams.poolingModule))
+            pooling_module = pooling_layers.NavigationPooling(hparams).pooling
 
         # Create the position estimates functions
         logging.info("Creating the social position estimate function")
@@ -161,7 +170,11 @@ class SocialModel:
             # If pooling_module is not None, add the pooling layer
             if pooling_module is not None:
                 pooling_output = pooling_module(
-                    current_coordinates, cell_output, pedestrians_mask[frame]
+                    current_coordinates,
+                    states=cell_output,
+                    peds_mask=pedestrians_mask[frame],
+                    navigation_map=navigation_map,
+                    top_left_dataset=top_left_dataset,
                 )
                 cell_input = tf.concat(
                     [pedestrians_coordinates_preprocessed, pooling_output],
