@@ -273,8 +273,17 @@ class CombinedPooling:
                 self.__layers.append(SocialPooling(hparams))
             elif layer == "occupancy":
                 self.__layers.append(OccupancyPooling(hparams))
+            elif layer == "navigation":
+                self.__layers.append(NavigationPooling(hparams))
 
-    def pooling(self, coordinates, states, peds_mask):
+    def pooling(
+        self,
+        coordinates,
+        states=None,
+        peds_mask=None,
+        navigation_map=None,
+        top_left_dataset=None,
+    ):
         """Compute the combined pooling.
 
         Args:
@@ -289,7 +298,15 @@ class CombinedPooling:
         """
         pooled = []
         for layer in self.__layers:
-            pooled.append(layer.pooling(coordinates, states, peds_mask))
+            pooled.append(
+                layer.pooling(
+                    coordinates,
+                    states=states,
+                    peds_mask=peds_mask,
+                    navigation_map=navigation_map,
+                    top_left_dataset=top_left_dataset,
+                )
+            )
 
         return tf.concat(pooled, 1)
 
