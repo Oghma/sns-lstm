@@ -70,7 +70,7 @@ skip: 1
 # -----------------------------------------------------------------------------
 
 # Maximum number of pedestrian per frame
-maxNumPed: 76
+maxNumPed: 93
 # Size of the sum pooling window
 gridSize: 8
 # Size of the neighborhood
