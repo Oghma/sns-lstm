@@ -79,9 +79,24 @@ neighborhoodSize: 2
 rnnSize: 128
 # Dimension of the embedding layer 
 embeddingSize: 64
-# Type of pooling module to use. Option supported: social, occupancy, combined
-# or null. Combined pooling is a list of the other pooling layers
-poolingModule: "social"
+# Type of pooling module to use. Option supported: social, occupancy,
+# navigation, combined or null. Combined pooling is a list of the other pooling
+# layers
+poolingModule:
+  - "social"
+  - "navigation"
+# Image width plus padding
+imageWidth: 25
+# Image height plus padding
+imageHeight: 20
+# Width of the navigation grid
+navigationWidth: 50
+# Height of the navigation grid
+navigationHeight: 40
+# Kernel size for the average pooling
+kernelSize: 2
+# Size of the neighborhood navigation grid
+navigationGrid: 5
 
 # -----------------------------------------------------------------------------
 #                                Logger settings                              |
