@@ -17,6 +17,7 @@ class Pooling(ABC):
         self.grid_size = hparams.gridSize
         self.neighborhood_size = hparams.neighborhoodSize
         self.max_num_ped = hparams.maxNumPed
+        self.keep_prob = hparams.keepProb
 
         self.pooling_layer = tf.layers.Dense(
             hparams.embeddingSize,
@@ -180,7 +181,9 @@ class SocialPooling(Pooling):
             (self.max_num_ped, -1),
         )
 
-        return self.pooling_layer(scattered)
+        output_layer = self.pooling_layer(scattered)
+        # Apply dropout
+        return tf.nn.dropout(output_layer, self.keep_prob)
 
 
 class OccupancyPooling(Pooling):
@@ -250,7 +253,9 @@ class OccupancyPooling(Pooling):
             (self.max_num_ped, -1),
         )
 
-        return self.pooling_layer(scattered)
+        output_layer = self.pooling_layer(scattered)
+        # Apply dropout
+        return tf.nn.dropout(output_layer, self.keep_prob)
 
 
 class CombinedPooling:

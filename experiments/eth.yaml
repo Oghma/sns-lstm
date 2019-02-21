@@ -25,6 +25,8 @@ optimizerDecay: 0.95
 optimizerMomentum: 0.2
 # Weight regularization rate
 l2Rate: 0.001
+# Dropout keep probability
+keepProb: 0.75
 
 # -----------------------------------------------------------------------------
 #                             Dataset parameters                              |

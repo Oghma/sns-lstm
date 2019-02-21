@@ -90,11 +90,19 @@ class SocialModel:
         logging.info("Creating the social loss function")
         loss_function = losses.social_loss_function
 
+        # Dropout rate
+        if phase == SAMPLE:
+            hparams.set_hparam("keepProb", 1.0)
+
         # ============================ MODEL LAYERS ============================
 
         # Define the LSTM with dimension rnn_size
         with tf.variable_scope("LSTM"):
             cell = tf.nn.rnn_cell.LSTMCell(hparams.rnnSize, name="Cell")
+            # Apply dropout
+            cell = tf.nn.rnn_cell.DropoutWrapper(
+                cell, output_keep_prob=hparams.keepProb
+            )
             # Output (or hidden states) of the LSTMs
             cell_output = tf.zeros(
                 [hparams.maxNumPed, hparams.rnnSize], tf.float32, name="Output"
@@ -157,6 +165,10 @@ class SocialModel:
             pedestrians_coordinates_preprocessed = coordinates_layer(
                 current_coordinates_rel
             )
+            # Apply dropout
+            pedestrians_coordinates_preprocessed = tf.nn.dropout(
+                pedestrians_coordinates_preprocessed, hparams.keepProb
+            )
 
             # If pooling_module is not None, add the pooling layer
             if pooling_module is not None:
@@ -176,6 +188,8 @@ class SocialModel:
 
             # Apply the linear layer to the cell output
             layered_output = output_layer(cell_output)
+            # Apply dropout
+            layered_output = tf.nn.dropout(layered_output, hparams.keepProb)
 
             # Compute the new coordinates or the pdf
             if phase == TRAIN:
