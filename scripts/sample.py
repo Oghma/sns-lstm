@@ -142,6 +142,9 @@ def main():
         coordinates_gt = []
         peds_in_sequence = []
 
+        # Zero padding
+        padding = len(str(test_loader.num_sequences))
+
         # ============================ START SAMPLING ============================
 
         with tf.Session() as sess:
@@ -160,8 +163,8 @@ def main():
 
             for seq in range(test_loader.num_sequences):
                 logging.info(
-                    "Sample trajectory number {}/{}".format(
-                        seq + 1, test_loader.num_sequences
+                    "Sample trajectory number {:{width}d}/{}".format(
+                        seq + 1, test_loader.num_sequences, width=padding
                     )
                 )
 

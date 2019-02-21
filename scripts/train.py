@@ -114,6 +114,9 @@ def main():
             # Create the saver
             saver = tf.train.Saver()
 
+        # Zero padding
+        padding = len(str(train_loader.num_sequences))
+
         # ============================ START TRAINING ============================
 
         with tf.Session() as sess:
@@ -140,12 +143,13 @@ def main():
                     end = time.time() - start
 
                     logging.info(
-                        "{}/{} epoch: {} time/Batch = {:.2f}s. Loss = {:.4f}".format(
+                        "{:{width}d}/{} epoch: {} time/Batch = {:.2f}s. Loss = {:.4f}".format(
                             sequence + 1,
                             train_loader.num_sequences,
                             epoch + 1,
                             end,
                             loss,
+                            width=padding,
                         )
                     )
 
