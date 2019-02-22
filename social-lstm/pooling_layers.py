@@ -266,6 +266,12 @@ class CombinedPooling:
             values.
 
         """
+        self.pooling_layer = tf.layers.Dense(
+            hparams.embeddingSize,
+            kernel_initializer=tf.contrib.layers.xavier_initializer(),
+            name="Combined/Layer",
+        )
+
         self.__layers = []
 
         for layer in hparams.poolingModule:
@@ -307,8 +313,8 @@ class CombinedPooling:
                     top_left_dataset=top_left_dataset,
                 )
             )
-
-        return tf.concat(pooled, 1)
+        concatenated = tf.concat(pooled, 1)
+        return self.pooling_layer(concatenated)
 
 
 class NavigationPooling(Pooling):
