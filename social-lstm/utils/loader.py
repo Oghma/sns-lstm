@@ -200,6 +200,9 @@ class DataLoader:
             )
             grid_pos = (cell_x + cell_y * self.navigation_w).astype(int)
             np.add.at(navigation_map, grid_pos, 1)
+            # Normalize in [0,1]
+            max_norm = max(navigation_map)
+            navigation_map = navigation_map / max_norm
             navigation_map = np.reshape(
                 navigation_map, [self.navigation_h, self.navigation_w]
             )
