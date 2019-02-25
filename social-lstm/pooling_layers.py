@@ -268,6 +268,7 @@ class CombinedPooling:
         """
         self.pooling_layer = tf.layers.Dense(
             hparams.embeddingSize,
+            activation=tf.nn.relu,
             kernel_initializer=tf.contrib.layers.xavier_initializer(),
             name="Combined/Layer",
         )
