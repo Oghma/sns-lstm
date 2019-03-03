@@ -198,7 +198,11 @@ class DataLoader:
             cell_y = np.floor(
                 ((top_left[1] - dataset[:, 3]) / self.image_h) * self.navigation_h
             )
-            grid_pos = (cell_x + cell_y * self.navigation_w).astype(int)
+            grid_pos = cell_x + cell_y * self.navigation_w
+            # For each cell, counts the pedestrian  only once
+            grid_pos = np.stack([dataset[:, 0], grid_pos], axis=1)
+            grid_pos = np.unique(grid_pos, axis=0)
+            grid_pos = grid_pos[:, 1].astype(int)
             np.add.at(navigation_map, grid_pos, 1)
             # Normalize in [0,1]
             max_norm = max(navigation_map)
