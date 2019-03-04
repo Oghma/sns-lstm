@@ -111,13 +111,13 @@ imageWidth: 25
 # Image height plus padding
 imageHeight: 20
 # Width of the navigation grid
-navigationWidth: 50
+navigationWidth: 100
 # Height of the navigation grid
-navigationHeight: 40
+navigationHeight: 80
 # Kernel size for the average pooling
 kernelSize: 2
 # Size of the neighborhood navigation grid
-navigationGrid: 5
+navigationGrid: 9
 
 # -----------------------------------------------------------------------------
 #                                Logger settings                              |
