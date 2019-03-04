@@ -32,7 +32,7 @@ l2Rate: 0.001
 
 # Folder of the datasets
 dataPath: "datasets"
-# Name of the training files inside the dataPath
+# Name of the training files in the dataPath
 trainDatasets:
   - "train/biwi_eth_train.txt"
   - "train/biwi_hotel_train.txt"
@@ -41,7 +41,7 @@ trainDatasets:
   - "train/students001_train.txt"
   - "train/students003_train.txt"
   - "train/uni_examples_train.txt"
-# Name of the validation files inside the dataPath
+# Name of the validation files in the dataPath
 validationDatasets:
   - "val/biwi_eth_val.txt"
   - "val/biwi_hotel_val.txt"
@@ -50,9 +50,30 @@ validationDatasets:
   - "val/students001_val.txt"
   - "val/students003_val.txt"
   - "val/uni_examples_val.txt"
-# Name of the validation files inside the dataPath
+# Name of the test files in the dataPath
 testDatasets:
   - "test/crowds_zara01.txt"
+# Name of the training navigation maps in the dataPath
+trainMaps:
+  - "navMap/eth.npy"
+  - "navMap/hotel.npy"
+  - "navMap/zara.npy"
+  - "navMap/zara.npy"
+  - "navMap/univ.npy"
+  - "navMap/univ.npy"
+  - "navMap/univ.npy"
+# Name of the validation navigation maps in the dataPath
+validationMaps:
+  - "navMap/eth.npy"
+  - "navMap/hotel.npy"
+  - "navMap/zara.npy"
+  - "navMap/zara.npy"
+  - "navMap/univ.npy"
+  - "navMap/univ.npy"
+  - "navMap/univ.npy"
+# Name of the test navigation maps in the dataPath
+testMaps:
+  - "navMap/zara.npy"
 # Delimiter used in the files of the dataset
 delimiter: "tab"
 # Number of frame observed

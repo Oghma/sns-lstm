@@ -95,14 +95,11 @@ def main():
         test_loader = utils.DataLoader(
             hparams.dataPath,
             hparams.testDatasets,
+            hparams.testMaps,
             delimiter=hparams.delimiter,
             skip=hparams.skip,
             max_num_ped=hparams.maxNumPed,
             trajectory_size=trajectory_size,
-            image_width=hparams.imageWidth,
-            image_height=hparams.imageHeight,
-            navigation_width=hparams.navigationWidth,
-            navigation_height=hparams.navigationHeight,
             neighborood_size=hparams.neighborhoodSize,
         )
 

@@ -20,14 +20,11 @@ class DataLoader:
         self,
         data_path,
         datasets,
+        navigation_maps,
         delimiter="\t",
         skip=1,
         max_num_ped=100,
         trajectory_size=20,
-        image_width=25,
-        image_height=20,
-        navigation_width=50,
-        navigation_height=40,
         neighborood_size=2,
         batch_size=10,
     ):
@@ -36,6 +33,7 @@ class DataLoader:
         Args:
           data_path: string. Path to the folder containing the datasets
           datasets: list. List of datasets to use.
+          navigation_maps: list. List of the navigation map.
           delimiter: string. Delimiter used to separate data inside the
             datasets.
           skip: int or True. If True, the number of frames to skip while making
@@ -44,10 +42,6 @@ class DataLoader:
           max_num_ped: int. Maximum number of pedestrian in a single frame.
           trajectories_size: int. Length of the trajectory (obs_length +
             pred_len).
-          image_width: float. The width of the images of the datasets.
-          image_height: float. The height of the images of the datasets.
-          navigation_width: int. The width of the navigation_map.
-          navigation_height: int The height of the navigation_map.
           neighborood_size: int. Neighborhood size.
           batch_size: int. Batch size.
 
@@ -60,16 +54,15 @@ class DataLoader:
             )
         )
 
+        # Store the list of the navigation map
+        self.__navigation = [os.path.join(data_path, navigation) for navigation in navigation_maps]
+
         # Store the batch_size, trajectory_size, the maximum number of
         # pedestrian in a single frame and skip value
         self.batch_size = batch_size
         self.trajectory_size = trajectory_size
         self.max_num_ped = max_num_ped
         self.skip = skip
-        self.image_w = image_width
-        self.image_h = image_height
-        self.navigation_w = navigation_width
-        self.navigation_h = navigation_height
         self.neighborood_size = neighborood_size
 
         if delimiter == "tab":
@@ -176,40 +169,21 @@ class DataLoader:
         self.__navigation_map = []
         self.__top_left = []
 
-        for dataset_path in self.__datasets:
+        for i, dataset_path in enumerate(self.__datasets):
             # Load the dataset. Each line is formed by frameID, pedID, x, y
             dataset = np.loadtxt(dataset_path, delimiter=delimiter)
             # Get the frames in dataset
             num_frames = np.unique(dataset[:, 0])
             # Initialize the array of frames for the current dataset
             frames_dataset = []
-            # Initialize the navigation map for the current dataset
-            navigation_map = np.zeros(self.navigation_h * self.navigation_w, float)
+            # Load the navigation map
+            navigation_map = np.load(self.__navigation[i])
 
-            # Build the navigation map
             # Image has padding so we add padding to the top_left point.
             top_left = [
                 np.floor(min(dataset[:, 2]) - self.neighborood_size / 2),
                 np.ceil(max(dataset[:, 3]) + self.neighborood_size / 2),
             ]
-            cell_x = np.floor(
-                ((dataset[:, 2] - top_left[0]) / self.image_w) * self.navigation_w
-            )
-            cell_y = np.floor(
-                ((top_left[1] - dataset[:, 3]) / self.image_h) * self.navigation_h
-            )
-            grid_pos = cell_x + cell_y * self.navigation_w
-            # For each cell, counts the pedestrian  only once
-            grid_pos = np.stack([dataset[:, 0], grid_pos], axis=1)
-            grid_pos = np.unique(grid_pos, axis=0)
-            grid_pos = grid_pos[:, 1].astype(int)
-            np.add.at(navigation_map, grid_pos, 1)
-            # Normalize in [0,1]
-            max_norm = max(navigation_map)
-            navigation_map = navigation_map / max_norm
-            navigation_map = np.reshape(
-                navigation_map, [self.navigation_h, self.navigation_w]
-            )
 
             # For each frame add to frames_dataset the pedestrian that appears
             # in the current frame
@@ -369,7 +343,8 @@ class DataLoader:
         return trajectories, len(peds_trajectories)
 
     def __type_and_shape(self):
-        """Define the type and the shape of the arrays that tensorflow will use"""
+        """Define the type and the shape of the arrays that tensorflow will use."""
+        navigation_h, navigation_w = self.__navigation_map[0].shape
         self.output_types = (
             tf.float32,
             tf.float32,
@@ -385,6 +360,6 @@ class DataLoader:
             tf.TensorShape([self.trajectory_size, self.max_num_ped, self.max_num_ped]),
             tf.TensorShape([]),
             tf.TensorShape([self.trajectory_size, self.max_num_ped]),
-            tf.TensorShape([self.navigation_h, self.navigation_w]),
+            tf.TensorShape([navigation_h, navigation_w]),
             tf.TensorShape([2]),
         )
