@@ -227,7 +227,7 @@ def saveCoords(pred, coordinates_gt, peds_in_sequence, pred_len, coordinates_pat
         coordinates_pred[index, -pred_len:, : peds_in_sequence[index]] = coords
 
     coordinates["predicted"] = coordinates_pred
-    with open(coordinates_path, "wb") as fp:
+    with open(coordinates_path + "pkl", "wb") as fp:
         pickle.dump(coordinates, fp)
 
 
