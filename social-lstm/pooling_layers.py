@@ -376,7 +376,12 @@ class NavigationPooling(Pooling):
         )
         indices = tf.stack([indices_x, indices_y], axis=3)
         indices = tf.reshape(indices, [self.max_num_ped, -1, 2])
-        grid = tf.gather_nd(navigation_map, indices)
+        grid = tf.gather_nd(navigation_map, indices, name="navGrid")
+        grid = tf.reshape(
+            grid, [self.max_num_ped, self.navigation_grid, self.navigation_grid, 1]
+        )
+        grid = tf.layers.average_pooling2d(grid, self.kernel_size, 1, "same")
+        grid = tf.reshape(grid, [self.max_num_ped, -1])
         return self.pooling_layer(grid)
 
     def _grid_pos(self, top_left, coordinates):
