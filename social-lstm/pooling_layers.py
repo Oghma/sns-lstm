@@ -380,7 +380,9 @@ class NavigationPooling(Pooling):
         grid = tf.reshape(
             grid, [self.max_num_ped, self.navigation_grid, self.navigation_grid, 1]
         )
-        grid = tf.layers.average_pooling2d(grid, self.kernel_size, 1, "same")
+        grid = tf.nn.avg_pool(
+            grid, [1, self.kernel_size, self.kernel_size, 1], [1, 1, 1, 1], "SAME"
+        )
         grid = tf.reshape(grid, [self.max_num_ped, -1])
         return self.pooling_layer(grid)
 
