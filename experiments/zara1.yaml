@@ -57,23 +57,23 @@ testDatasets:
 trainMaps:
   - "navMap/eth.npy"
   - "navMap/hotel.npy"
-  - "navMap/zara.npy"
-  - "navMap/zara.npy"
-  - "navMap/univ.npy"
-  - "navMap/univ.npy"
-  - "navMap/univ.npy"
+  - "navMap/zara2.npy"
+  - "navMap/zara3.npy"
+  - "navMap/univ1.npy"
+  - "navMap/univ2.npy"
+  - "navMap/univ3.npy"
 # Name of the validation navigation maps in the dataPath
 validationMaps:
   - "navMap/eth.npy"
   - "navMap/hotel.npy"
-  - "navMap/zara.npy"
-  - "navMap/zara.npy"
-  - "navMap/univ.npy"
-  - "navMap/univ.npy"
-  - "navMap/univ.npy"
+  - "navMap/zara2.npy"
+  - "navMap/zara3.npy"
+  - "navMap/univ1.npy"
+  - "navMap/univ2.npy"
+  - "navMap/univ3.npy"
 # Name of the test navigation maps in the dataPath
 testMaps:
-  - "navMap/zara.npy"
+  - "navMap/zara1.npy"
 # Delimiter used in the files of the dataset
 delimiter: "tab"
 # Number of frame observed
@@ -111,13 +111,13 @@ imageWidth: 25
 # Image height plus padding
 imageHeight: 20
 # Width of the navigation grid
-navigationWidth: 100
+navigationWidth: 400
 # Height of the navigation grid
-navigationHeight: 80
+navigationHeight: 320
 # Kernel size for the average pooling
 kernelSize: 2
 # Size of the neighborhood navigation grid
-navigationGrid: 9
+navigationGrid: 33
 
 # -----------------------------------------------------------------------------
 #                                Logger settings                              |
