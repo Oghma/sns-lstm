@@ -95,10 +95,12 @@ def main():
         test_loader = utils.DataLoader(
             hparams.dataPath,
             hparams.testDatasets,
+            hparams.testMaps,
             delimiter=hparams.delimiter,
             skip=hparams.skip,
             max_num_ped=hparams.maxNumPed,
             trajectory_size=trajectory_size,
+            neighborood_size=hparams.neighborhoodSize,
         )
 
         logging.info("Creating the test dataset pipeline...")
@@ -225,7 +227,7 @@ def saveCoords(pred, coordinates_gt, peds_in_sequence, pred_len, coordinates_pat
         coordinates_pred[index, -pred_len:, : peds_in_sequence[index]] = coords
 
     coordinates["predicted"] = coordinates_pred
-    with open(coordinates_path, "wb") as fp:
+    with open(coordinates_path + "pkl", "wb") as fp:
         pickle.dump(coordinates, fp)
 
 

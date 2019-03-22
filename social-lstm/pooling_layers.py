@@ -27,7 +27,7 @@ class Pooling(ABC):
         )
 
     @abstractmethod
-    def pooling(self, coordinates, states, peds_mask):
+    def pooling(self, coordinates, states=None, peds_mask=None, **kwargs):
         """Compute the pooling.
 
         Args:
@@ -37,7 +37,7 @@ class Pooling(ABC):
           peds_mask: tensor of shape [max_num_ped, max_num_ped]. Grid layer.
 
         Returns:
-          The pooling layer
+          The pooling layer.
 
         """
         pass
@@ -122,7 +122,7 @@ class SocialPooling(Pooling):
         super().__init__(hparams)
         self.rnn_size = hparams.rnnSize
 
-    def pooling(self, coordinates, states, peds_mask):
+    def pooling(self, coordinates, states=None, peds_mask=None, **kwargs):
         """Compute the social pooling.
 
         Args:
@@ -132,7 +132,7 @@ class SocialPooling(Pooling):
           peds_mask: tensor of shape [max_num_ped, max_num_ped]. Grid layer.
 
         Returns:
-          The social pooling layer
+          The social pooling layer.
 
         """
         top_left, bottom_right = self._get_bounds(coordinates)
@@ -199,7 +199,7 @@ class OccupancyPooling(Pooling):
         """
         super().__init__(hparams)
 
-    def pooling(self, coordinates, states, peds_mask):
+    def pooling(self, coordinates, states=None, peds_mask=None, **kwargs):
         """Compute the occupancy pooling.
 
         Args:
@@ -209,7 +209,7 @@ class OccupancyPooling(Pooling):
           peds_mask: tensor of shape [max_num_ped, max_num_ped]. Grid layer.
 
         Returns:
-          The occupancy pooling layer
+          The occupancy pooling layer.
 
         """
         top_left, bottom_right = self._get_bounds(coordinates)
@@ -271,6 +271,13 @@ class CombinedPooling:
             values.
 
         """
+        self.pooling_layer = tf.layers.Dense(
+            hparams.embeddingSize,
+            activation=tf.nn.relu,
+            kernel_initializer=tf.contrib.layers.xavier_initializer(),
+            name="Combined/Layer",
+        )
+
         self.__layers = []
 
         for layer in hparams.poolingModule:
@@ -278,8 +285,17 @@ class CombinedPooling:
                 self.__layers.append(SocialPooling(hparams))
             elif layer == "occupancy":
                 self.__layers.append(OccupancyPooling(hparams))
+            elif layer == "navigation":
+                self.__layers.append(NavigationPooling(hparams))
 
-    def pooling(self, coordinates, states, peds_mask):
+    def pooling(
+        self,
+        coordinates,
+        states=None,
+        peds_mask=None,
+        navigation_map=None,
+        top_left_dataset=None,
+    ):
         """Compute the combined pooling.
 
         Args:
@@ -289,11 +305,113 @@ class CombinedPooling:
           peds_mask: tensor of shape [max_num_ped, max_num_ped]. Grid layer.
 
         Returns:
-          The pooling layer
+          The pooling layer.
 
         """
         pooled = []
         for layer in self.__layers:
-            pooled.append(layer.pooling(coordinates, states, peds_mask))
+            pooled.append(
+                layer.pooling(
+                    coordinates,
+                    states=states,
+                    peds_mask=peds_mask,
+                    navigation_map=navigation_map,
+                    top_left_dataset=top_left_dataset,
+                )
+            )
+        concatenated = tf.concat(pooled, 1)
+        return self.pooling_layer(concatenated)
 
-        return tf.concat(pooled, 1)
+
+class NavigationPooling(Pooling):
+    """Implement the navigation pooling"""
+
+    def __init__(self, hparams):
+        """Constructor of the Navigation pooling class.
+
+        Args:
+          hparams: An HParams instance. hparams must contains grid_size,
+            neighborhood_size, max_num_ped, embedding_size, rnn_size values,
+            image_size, naviagation_size, kernel_size and navigation_grid.
+
+        """
+        super().__init__(hparams)
+
+        self.image_size = [hparams.imageWidth, hparams.imageHeight]
+        self.navigation_size = [hparams.navigationWidth, hparams.navigationHeight]
+        self.kernel_size = hparams.kernelSize
+        self.navigation_grid = hparams.navigationGrid
+        self.__index = tf.constant(0)
+
+    def pooling(
+        self, coordinates, navigation_map=None, top_left_dataset=None, **kwargs
+    ):
+        """Compute the navigation pooling.
+
+        Args:
+          coordinates: tensor of shape [max_num_ped, 2]. Coordinates.
+          navigation_map: tensor of shape [navigation_height, navigation_width].
+            Navigation map.
+          top_left_dataset: tensor of shape [2]. Coordinates for the upper
+            left-most point in the dataset
+
+        Returns:
+          The navigation poolin layer.
+
+        """
+
+        top_left, bottom_right = self._get_bounds(coordinates)
+
+        # Get the top_left and bottom_right cell positions inside the
+        # navigation map
+        top_left_cell = self._grid_pos(top_left_dataset, top_left)
+
+        # For each pedestrian get the grid from the navigation map
+        indices_x = tf.tile(
+            (tf.range(self.navigation_grid) + top_left_cell[:, 0, tf.newaxis])[
+                ..., tf.newaxis
+            ],
+            [1, 1, self.navigation_grid],
+        )
+        indices_y = tf.tile(
+            (tf.range(self.navigation_grid) + top_left_cell[:, 1, tf.newaxis])[
+                :, tf.newaxis
+            ],
+            [1, self.navigation_grid, 1],
+        )
+        indices = tf.stack([indices_x, indices_y], axis=3)
+        indices = tf.reshape(indices, [self.max_num_ped, -1, 2])
+        grid = tf.gather_nd(navigation_map, indices, name="navGrid")
+        grid = tf.reshape(
+            grid, [self.max_num_ped, self.navigation_grid, self.navigation_grid, 1]
+        )
+        grid = tf.nn.avg_pool(
+            grid, [1, self.kernel_size, self.kernel_size, 1], [1, 1, 1, 1], "SAME"
+        )
+        grid = tf.reshape(grid, [self.max_num_ped, -1])
+        return self.pooling_layer(grid)
+
+    def _grid_pos(self, top_left, coordinates):
+        """Calculate the position in the grid layer of the neighbours.
+
+        Args:
+          top_left: tensor of shape [max_num_ped, 2]. Top left
+            bound.
+          coordinates: tensor of shape [max_num_ped, 2].
+            Coordinates.
+
+        Returns:
+          Tensor of shape [max_num_ped, 2] that is the position in
+            the navigation map.
+
+        """
+        cell_x = tf.floor(
+            ((coordinates[:, 0] - top_left[0]) / self.image_size[0])
+            * self.navigation_size[0]
+        )
+        cell_y = tf.floor(
+            ((top_left[1] - coordinates[:, 1]) / self.image_size[1])
+            * self.navigation_size[1]
+        )
+        grid_pos = tf.stack([cell_y, cell_x], axis=1)
+        return tf.cast(grid_pos, tf.int32)

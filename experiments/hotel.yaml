@@ -8,7 +8,7 @@ name: "hotel"
 # Buffer size of the tf.data.Dataset.prefetch option
 prefetchSize: 1000
 # Shuffle the dataset
-shuffle: True
+shuffle: False
 # Number of epochs
 epochs: 50
 # Use centered option in RMSProp
@@ -24,7 +24,7 @@ optimizerDecay: 0.95
 # Optimizer momentum rate
 optimizerMomentum: 0.2
 # Weight regularization rate
-l2Rate: 0.001
+l2Rate: 0.005
 # Dropout keep probability
 keepProb: 0.75
 
@@ -34,7 +34,7 @@ keepProb: 0.75
 
 # Folder of the datasets
 dataPath: "datasets"
-# Name of the training files inside the dataPath
+# Name of the training files in the dataPath
 trainDatasets:
   - "train/biwi_eth_train.txt"
   - "train/crowds_zara01_train.txt"
@@ -43,7 +43,7 @@ trainDatasets:
   - "train/students001_train.txt"
   - "train/students003_train.txt"
   - "train/uni_examples_train.txt"
-# Name of the validation files inside the dataPath
+# Name of the validation files in the dataPath
 validationDatasets:
   - "val/biwi_eth_val.txt"
   - "val/crowds_zara01_val.txt"
@@ -52,9 +52,30 @@ validationDatasets:
   - "val/students001_val.txt"
   - "val/students003_val.txt"
   - "val/uni_examples_val.txt"
-# Name of the validation files inside the dataPath
+# Name of the test files in the dataPath
 testDatasets:
   - "test/biwi_hotel.txt"
+# Name of the training navigation maps in the dataPath
+trainMaps:
+  - "navMap/eth.npy"
+  - "navMap/zara1.npy"
+  - "navMap/zara2.npy"
+  - "navMap/zara3.npy"
+  - "navMap/univ1.npy"
+  - "navMap/univ2.npy"
+  - "navMap/univ3.npy"
+# Name of the validation navigation maps in the dataPath
+validationMaps:
+  - "navMap/eth.npy"
+  - "navMap/zara1.npy"
+  - "navMap/zara2.npy"
+  - "navMap/zara3.npy"
+  - "navMap/univ1.npy"
+  - "navMap/univ2.npy"
+  - "navMap/univ3.npy"
+# Name of the test navigation maps in the dataPath
+testMaps:
+  - "navMap/hotel.npy"
 # Delimiter used in the files of the dataset
 delimiter: "tab"
 # Number of frame observed
@@ -81,9 +102,24 @@ neighborhoodSize: 2
 rnnSize: 128
 # Dimension of the embedding layer 
 embeddingSize: 64
-# Type of pooling module to use. Option supported: social, occupancy, combined
-# or null. Combined pooling is a list of the other pooling layers
-poolingModule: "social"
+# Type of pooling module to use. Option supported: social, occupancy,
+# navigation, combined or null. Combined pooling is a list of the other pooling
+# layers
+poolingModule:
+  - "social"
+  - "navigation"
+# Image width plus padding
+imageWidth: 25
+# Image height plus padding
+imageHeight: 20
+# Width of the navigation grid
+navigationWidth: 400
+# Height of the navigation grid
+navigationHeight: 320
+# Kernel size for the average pooling
+kernelSize: 2
+# Size of the neighborhood navigation grid
+navigationGrid: 33
 
 # -----------------------------------------------------------------------------
 #                                Logger settings                              |

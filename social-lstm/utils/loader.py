@@ -20,10 +20,12 @@ class DataLoader:
         self,
         data_path,
         datasets,
+        navigation_maps,
         delimiter="\t",
         skip=1,
         max_num_ped=100,
         trajectory_size=20,
+        neighborood_size=2,
         batch_size=10,
     ):
         """Constructor of the DataLoader class.
@@ -31,6 +33,7 @@ class DataLoader:
         Args:
           data_path: string. Path to the folder containing the datasets
           datasets: list. List of datasets to use.
+          navigation_maps: list. List of the navigation map.
           delimiter: string. Delimiter used to separate data inside the
             datasets.
           skip: int or True. If True, the number of frames to skip while making
@@ -39,6 +42,7 @@ class DataLoader:
           max_num_ped: int. Maximum number of pedestrian in a single frame.
           trajectories_size: int. Length of the trajectory (obs_length +
             pred_len).
+          neighborood_size: int. Neighborhood size.
           batch_size: int. Batch size.
 
         """
@@ -50,12 +54,16 @@ class DataLoader:
             )
         )
 
+        # Store the list of the navigation map
+        self.__navigation = [os.path.join(data_path, navigation) for navigation in navigation_maps]
+
         # Store the batch_size, trajectory_size, the maximum number of
         # pedestrian in a single frame and skip value
         self.batch_size = batch_size
         self.trajectory_size = trajectory_size
         self.max_num_ped = max_num_ped
         self.skip = skip
+        self.neighborood_size = neighborood_size
 
         if delimiter == "tab":
             delimiter = "\t"
@@ -71,11 +79,12 @@ class DataLoader:
         """Generator method that returns an iterator pointing to the next batch.
 
         Returns:
-            Generator object that has a list of trajectory sequences of size
-              batch_size, a list of relative trajectory sequences of size
-              batch_size, a list containing the mask for the grid layer of size
-              batch_size, a list with the number of pedestrian in each sequence
-              and a list containing the mask for the loss function.
+          Generator object that has a list of trajectory sequences of size
+            batch_size, a list of relative trajectory sequences of size
+            batch_size, a list containing the mask for the grid layer of size
+            batch_size, a list with the number of pedestrian in each sequence, a
+            list containing the mask for the loss function, a list containing
+            the navigation map and the top_left coordinates for each dataset.
 
         """
         it = self.next_sequence()
@@ -85,6 +94,8 @@ class DataLoader:
             mask_batch = []
             peds_batch = []
             loss_batch = []
+            navigation_map_batch = []
+            top_left_batch = []
 
             for size in range(self.batch_size):
                 data = next(it)
@@ -93,8 +104,18 @@ class DataLoader:
                 mask_batch.append(data[2])
                 peds_batch.append(data[3])
                 loss_batch.append(data[4])
+                navigation_map_batch.append(data[5])
+                top_left_batch.append(data[6])
 
-            yield batch, batch_rel, mask_batch, peds_batch, loss_batch
+            yield (
+                batch,
+                batch_rel,
+                mask_batch,
+                peds_batch,
+                loss_batch,
+                navigation_map_batch,
+                top_left_batch,
+            )
 
     def next_sequence(self):
         """Generator method that returns an iterator pointing to the next sequence.
@@ -102,7 +123,8 @@ class DataLoader:
         Returns:
           Generator object that contains a trajectory sequence, a relative
             trajectory sequence, the mask for the grid layer, the number of
-            pedestrian in the sequence and the mask for the loss function.
+            pedestrian in the sequence, the mask for the loss function, the
+            navigation map and the top_left coordinates for the datset.
 
         """
         # Iterate through all sequences
@@ -118,15 +140,23 @@ class DataLoader:
                 sequence_rel[1:] = sequence[1:] - sequence[:-1]
                 num_peds = self.__num_peds[idx_d][idx_s]
 
-                yield (sequence, sequence_rel, mask, num_peds, loss_mask)
+                yield (
+                    sequence,
+                    sequence_rel,
+                    mask,
+                    num_peds,
+                    loss_mask,
+                    self.__navigation_map[idx_d],
+                    self.__top_left[idx_d],
+                )
 
     def __load_data(self, delimiter):
         """Load the datasets and define the list __frames.
 
         Load the datasets and define the list __frames wich contains all the
-        frames of the datasets. __frames has shape [num_datasets,
-        num_frames_dataset, num_peds_frame, 4] where 4 is frameID, pedID,
-        x and y.
+        frames of the datasets and the list __navigation_map. __frames has shape
+        [num_datasets, num_frames_dataset, num_peds_frame, 4] where 4 is
+        frameID, pedID, x and y.
 
         Args:
           delimiter: string. Delimiter used to separate data inside the
@@ -136,14 +166,24 @@ class DataLoader:
         # List that contains all the frames of the datasets. Each dataset is a
         # list of frames of shape (num_peds, (frameID, pedID, x and y))
         self.__frames = []
+        self.__navigation_map = []
+        self.__top_left = []
 
-        for dataset_path in self.__datasets:
+        for i, dataset_path in enumerate(self.__datasets):
             # Load the dataset. Each line is formed by frameID, pedID, x, y
             dataset = np.loadtxt(dataset_path, delimiter=delimiter)
             # Get the frames in dataset
             num_frames = np.unique(dataset[:, 0])
             # Initialize the array of frames for the current dataset
             frames_dataset = []
+            # Load the navigation map
+            navigation_map = np.load(self.__navigation[i])
+
+            # Image has padding so we add padding to the top_left point.
+            top_left = [
+                np.floor(min(dataset[:, 2]) - self.neighborood_size / 2),
+                np.ceil(max(dataset[:, 3]) + self.neighborood_size / 2),
+            ]
 
             # For each frame add to frames_dataset the pedestrian that appears
             # in the current frame
@@ -153,6 +193,8 @@ class DataLoader:
                 frames_dataset.append(frame)
 
             self.__frames.append(frames_dataset)
+            self.__navigation_map.append(navigation_map)
+            self.__top_left.append(top_left)
 
     def __preprocess_data(self):
         """Preprocess the datasets and define the number of sequences and batches.
@@ -301,12 +343,23 @@ class DataLoader:
         return trajectories, len(peds_trajectories)
 
     def __type_and_shape(self):
-        """Define the type and the shape of the arrays that tensorflow will use"""
-        self.output_types = (tf.float32, tf.float32, tf.bool, tf.int32, tf.int32)
+        """Define the type and the shape of the arrays that tensorflow will use."""
+        navigation_h, navigation_w = self.__navigation_map[0].shape
+        self.output_types = (
+            tf.float32,
+            tf.float32,
+            tf.bool,
+            tf.int32,
+            tf.int32,
+            tf.float32,
+            tf.float32,
+        )
         self.shape = (
             tf.TensorShape([self.trajectory_size, self.max_num_ped, 2]),
             tf.TensorShape([self.trajectory_size, self.max_num_ped, 2]),
             tf.TensorShape([self.trajectory_size, self.max_num_ped, self.max_num_ped]),
             tf.TensorShape([]),
             tf.TensorShape([self.trajectory_size, self.max_num_ped]),
+            tf.TensorShape([navigation_h, navigation_w]),
+            tf.TensorShape([2]),
         )

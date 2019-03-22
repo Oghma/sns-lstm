@@ -70,19 +70,23 @@ def main():
         train_loader = utils.DataLoader(
             hparams.dataPath,
             hparams.trainDatasets,
+            hparams.trainMaps,
             delimiter=hparams.delimiter,
             skip=hparams.skip,
             max_num_ped=hparams.maxNumPed,
             trajectory_size=trajectory_size,
+            neighborood_size=hparams.neighborhoodSize,
         )
         logging.info("Loading the validation datasets...")
         val_loader = utils.DataLoader(
             hparams.dataPath,
             hparams.validationDatasets,
+            hparams.validationMaps,
             delimiter=hparams.delimiter,
             skip=hparams.skip,
             max_num_ped=hparams.maxNumPed,
             trajectory_size=trajectory_size,
+            neighborood_size=hparams.neighborhoodSize,
         )
 
         logging.info("Creating the training and validation dataset pipeline...")
