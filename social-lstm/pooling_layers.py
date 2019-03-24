@@ -415,3 +415,92 @@ class NavigationPooling(Pooling):
         )
         grid_pos = tf.stack([cell_y, cell_x], axis=1)
         return tf.cast(grid_pos, tf.int32)
+
+
+class SemanticPooling(Pooling):
+    """Implement the Semantic layer."""
+
+    def __init__(self, hparams):
+        """Constructor of the Semantic pooling class.
+
+        Args:
+          hparams: An HParams instance. hparams must contains
+            semantic_grid_size, neighborhood_size, max_num_ped, embedding_size
+            and numLabels values.
+
+        """
+        super().__init__(hparams)
+        self.num_labels = hparams.numLabels
+        self.grid_size = hparams.semanticGridSize
+        self.kernel_size = hparams.kernelSize
+        self.ones = tf.ones([self.max_num_ped, 1])
+
+    def pooling(self, coordinates, semantic_map=None, H=None, **kwargs):
+        """Compute the semantic pooling.
+
+        Args:
+          coordinates: tensor of shape [max_num_ped, 2]. Coordinates.
+          semantic_map: tensor of shape [num_points, num_labels + 2]. Semantic
+            map.
+          H: tensor of shape [3,3]. Homography matrix.
+        Returns:
+          The semantic pooling layer.
+
+        """
+        top_left, _ = self._get_bounds(coordinates)
+        # Transform top_left coordinates in pixel coordinates
+        top_left = tf.concat([top_left, self.ones], axis=1)
+        pixel_coordinates = tf.matmul(H, tf.transpose(top_left))
+        pixel_coordinates = pixel_coordinates / pixel_coordinates[2]
+        pixel_coordinates = tf.transpose(pixel_coordinates[:2])
+        pixel_coordinates = tf.cast(pixel_coordinates, tf.int32)
+
+        # For each pedestrian get the grid from the navigation map
+        indices_x = tf.tile(
+            (tf.range(self.grid_size) + pixel_coordinates[:, 0, tf.newaxis])[
+                ..., tf.newaxis
+            ],
+            [1, 1, self.grid_size],
+        )
+        indices_y = tf.tile(
+            (tf.range(self.grid_size) + pixel_coordinates[:, 1, tf.newaxis])[
+                :, tf.newaxis
+            ],
+            [1, self.grid_size, 1],
+        )
+        indices = tf.stack([indices_x, indices_y], axis=3)
+        indices = tf.reshape(indices, [self.max_num_ped, -1, 2])
+        grid = tf.gather_nd(semantic_map, indices, name="semGrid")
+        grid = tf.reshape(
+            grid, [self.max_num_ped, self.grid_size, self.grid_size, self.num_labels]
+        )
+        grid = tf.nn.avg_pool(
+            grid, [1, self.kernel_size, self.kernel_size, 1], [1, 1, 1, 1], "SAME"
+        )
+        grid = tf.reshape(grid, [self.max_num_ped, -1])
+        return self.pooling_layer(grid)
+
+    def _grid_pos(self, top_left, coordinates):
+        """Calculate the position in the grid layer of the neighbours.
+
+        Args:
+          top_left: tensor of shape [max_num_ped, 2]. Top left
+            bound.
+          coordinates: tensor of shape [max_num_ped, 2].
+            Coordinates.
+
+        Returns:
+          Tensor of shape [max_num_ped, 2] that is the position in
+            the navigation map.
+
+        """
+        cell_x = tf.floor(
+            ((coordinates[:, 0] - top_left[0]) / self.image_size[0])
+            * self.navigation_size[0]
+        )
+        cell_y = tf.floor(
+            ((top_left[1] - coordinates[:, 1]) / self.image_size[1])
+            * self.navigation_size[1]
+        )
+        grid_pos = tf.stack([cell_y, cell_x], axis=1)
+        return tf.cast(grid_pos, tf.int32)
