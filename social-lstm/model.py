@@ -42,6 +42,11 @@ class SocialModel:
         navigation_map = dataset.tensors[5]
         # Create the tensor for the upper left-most point in the dataset
         top_left_dataset = dataset.tensors[6]
+        # Create the tensor for the semantic map of shape
+        # [num_points, 2 + num_labels]
+        semantic_map = dataset.tensors[7]
+        # Create the tensor for the homography matrix of shape [3,3]
+        homography = dataset.tensors[8]
         # Create the tensor for the pedestrian relative coordinates of shape
         # [max_num_ped, 2]
         new_pedestrians_coordinates_rel = tf.zeros([hparams.maxNumPed, 2])
@@ -87,6 +92,9 @@ class SocialModel:
         elif hparams.poolingModule == "navigation":
             logging.info("Creating the {} pooling".format(hparams.poolingModule))
             pooling_module = pooling_layers.NavigationPooling(hparams).pooling
+        elif hparams.poolingModule == "semantic":
+            logging.info("Creating the {} pooling".format(hparams.poolingModule))
+            pooling_module = pooling_layers.SemanticPooling(hparams).pooling
 
         # Create the position estimates functions
         logging.info("Creating the social position estimate function")
@@ -187,6 +195,8 @@ class SocialModel:
                     peds_mask=pedestrians_mask[frame],
                     navigation_map=navigation_map,
                     top_left_dataset=top_left_dataset,
+                    semantic_map=semantic_map,
+                    H=homography,
                 )
                 cell_input = tf.concat(
                     [pedestrians_coordinates_preprocessed, pooling_output],
