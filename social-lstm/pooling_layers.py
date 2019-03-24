@@ -353,7 +353,6 @@ class NavigationPooling(Pooling):
         self.navigation_size = [hparams.navigationWidth, hparams.navigationHeight]
         self.kernel_size = hparams.kernelSize
         self.navigation_grid = hparams.navigationGrid
-        self.__index = tf.constant(0)
 
     def pooling(
         self, coordinates, navigation_map=None, top_left_dataset=None, **kwargs
