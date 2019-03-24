@@ -21,6 +21,10 @@ class DataLoader:
         data_path,
         datasets,
         navigation_maps,
+        semantic_maps,
+        semantic_mapping,
+        homography,
+        num_labels=6,
         delimiter="\t",
         skip=1,
         max_num_ped=100,
@@ -34,6 +38,10 @@ class DataLoader:
           data_path: string. Path to the folder containing the datasets
           datasets: list. List of datasets to use.
           navigation_maps: list. List of the navigation map.
+          semantic_maps: list. List of the semantic map.
+          semantic_mapping: list. Mapping between semantic_maps and datasets.
+          num_labels: int. Number of labels inside the semantic map.
+          homography: list. List of homography matrix.
           delimiter: string. Delimiter used to separate data inside the
             datasets.
           skip: int or True. If True, the number of frames to skip while making
@@ -55,7 +63,15 @@ class DataLoader:
         )
 
         # Store the list of the navigation map
-        self.__navigation = [os.path.join(data_path, navigation) for navigation in navigation_maps]
+        self.__navigation = [
+            os.path.join(data_path, navigation) for navigation in navigation_maps
+        ]
+        # Store the list of the semantic map
+        self.__semantic = [
+            os.path.join(data_path, semantic) for semantic in semantic_maps
+        ]
+        # Store the list of the homography matrix
+        self.__homography = [os.path.join(data_path, hg) for hg in homography]
 
         # Store the batch_size, trajectory_size, the maximum number of
         # pedestrian in a single frame and skip value
@@ -64,6 +80,7 @@ class DataLoader:
         self.max_num_ped = max_num_ped
         self.skip = skip
         self.neighborood_size = neighborood_size
+        self.num_labels = num_labels
 
         if delimiter == "tab":
             delimiter = "\t"
@@ -71,7 +88,7 @@ class DataLoader:
             delimiter = " "
 
         # Load the datasets and preprocess them
-        self.__load_data(delimiter)
+        self.__load_data(delimiter, semantic_mapping)
         self.__preprocess_data()
         self.__type_and_shape()
 
@@ -84,7 +101,8 @@ class DataLoader:
             batch_size, a list containing the mask for the grid layer of size
             batch_size, a list with the number of pedestrian in each sequence, a
             list containing the mask for the loss function, a list containing
-            the navigation map and the top_left coordinates for each dataset.
+            the navigation map, the top_left coordinates for each dataset and a
+            list containing the semantic maps.
 
         """
         it = self.next_sequence()
@@ -96,6 +114,8 @@ class DataLoader:
             loss_batch = []
             navigation_map_batch = []
             top_left_batch = []
+            semantic_map_batch = []
+            homography_matrix = []
 
             for size in range(self.batch_size):
                 data = next(it)
@@ -106,7 +126,8 @@ class DataLoader:
                 loss_batch.append(data[4])
                 navigation_map_batch.append(data[5])
                 top_left_batch.append(data[6])
-
+                semantic_map_batch.append(data[7])
+                homography_matrix.append(data[8])
             yield (
                 batch,
                 batch_rel,
@@ -115,6 +136,8 @@ class DataLoader:
                 loss_batch,
                 navigation_map_batch,
                 top_left_batch,
+                semantic_map_batch,
+                homography_matrix,
             )
 
     def next_sequence(self):
@@ -124,7 +147,8 @@ class DataLoader:
           Generator object that contains a trajectory sequence, a relative
             trajectory sequence, the mask for the grid layer, the number of
             pedestrian in the sequence, the mask for the loss function, the
-            navigation map and the top_left coordinates for the datset.
+            navigation map, the top_left coordinates for the datset and the
+            semantic map.
 
         """
         # Iterate through all sequences
@@ -148,9 +172,11 @@ class DataLoader:
                     loss_mask,
                     self.__navigation_map[idx_d],
                     self.__top_left[idx_d],
+                    self.__semantic_map[idx_d],
+                    self.__homography_matrix[idx_d],
                 )
 
-    def __load_data(self, delimiter):
+    def __load_data(self, delimiter, semantic_mapping):
         """Load the datasets and define the list __frames.
 
         Load the datasets and define the list __frames wich contains all the
@@ -168,6 +194,19 @@ class DataLoader:
         self.__frames = []
         self.__navigation_map = []
         self.__top_left = []
+        self.__semantic_map = []
+        self.__homography_matrix = []
+        semantic_map_labeled = {}
+        homography_map = {}
+
+        # Load and add the one hot encoding to the semantic maps
+        for i, smap in enumerate(self.__semantic):
+            # Load the semantic map
+            semantic_map = np.load(smap)
+            homography = np.loadtxt(self.__homography[i], delimiter=delimiter)
+            filename = os.path.splitext(os.path.basename(smap))[0]
+            semantic_map_labeled[filename] = semantic_map
+            homography_map[filename] = homography
 
         for i, dataset_path in enumerate(self.__datasets):
             # Load the dataset. Each line is formed by frameID, pedID, x, y
@@ -195,6 +234,8 @@ class DataLoader:
             self.__frames.append(frames_dataset)
             self.__navigation_map.append(navigation_map)
             self.__top_left.append(top_left)
+            self.__semantic_map.append(semantic_map_labeled[semantic_mapping[i]])
+            self.__homography_matrix.append(homography_map[semantic_mapping[i]])
 
     def __preprocess_data(self):
         """Preprocess the datasets and define the number of sequences and batches.
@@ -353,6 +394,8 @@ class DataLoader:
             tf.int32,
             tf.float32,
             tf.float32,
+            tf.float32,
+            tf.float32,
         )
         self.shape = (
             tf.TensorShape([self.trajectory_size, self.max_num_ped, 2]),
@@ -362,4 +405,6 @@ class DataLoader:
             tf.TensorShape([self.trajectory_size, self.max_num_ped]),
             tf.TensorShape([navigation_h, navigation_w]),
             tf.TensorShape([2]),
+            tf.TensorShape([None, None, self.num_labels]),
+            tf.TensorShape([3, 3]),
         )
