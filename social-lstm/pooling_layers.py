@@ -287,6 +287,8 @@ class CombinedPooling:
                 self.__layers.append(OccupancyPooling(hparams))
             elif layer == "navigation":
                 self.__layers.append(NavigationPooling(hparams))
+            elif layer == "semantic":
+                self.__layers.append(SemanticPooling(hparams))
 
     def pooling(
         self,
@@ -295,6 +297,8 @@ class CombinedPooling:
         peds_mask=None,
         navigation_map=None,
         top_left_dataset=None,
+        semantic_map=None,
+        H=None,
     ):
         """Compute the combined pooling.
 
@@ -303,6 +307,12 @@ class CombinedPooling:
           states: tensor of shape [max_num_ped, rnn_size]. Cell states of the
             LSTM.
           peds_mask: tensor of shape [max_num_ped, max_num_ped]. Grid layer.
+          navigation_map: tensor of shape [navigation_height, navigation_width].
+            Navigation map.
+          top_left_dataset: tensor of shape [2]. Coordinates for the upper
+            left-most point in the dataset.
+          semantic_map: tensor of shape [num_points, num_labels + 2]. Semantic
+            map.
 
         Returns:
           The pooling layer.
@@ -317,6 +327,8 @@ class CombinedPooling:
                     peds_mask=peds_mask,
                     navigation_map=navigation_map,
                     top_left_dataset=top_left_dataset,
+                    semantic_map=semantic_map,
+                    H=H,
                 )
             )
         concatenated = tf.concat(pooled, 1)
