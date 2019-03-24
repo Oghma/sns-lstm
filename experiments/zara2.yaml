@@ -6,7 +6,7 @@ name: "zara2"
 # -----------------------------------------------------------------------------
 
 # Buffer size of the tf.data.Dataset.prefetch option
-prefetchSize: 1000
+prefetchSize: 100
 # Shuffle the dataset
 shuffle: False
 # Number of epochs
@@ -76,6 +76,41 @@ validationMaps:
 # Name of the test navigation maps in the dataPath
 testMaps:
   - "navMap/zara2.npy"
+# Number of labels of the semantic map
+numLabels: 8
+# List of semantic maps
+semanticMaps:
+  - "semMap/eth.npy"
+  - "semMap/hotel.npy"
+  - "semMap/univ.npy"
+  - "semMap/zara.npy"
+# List of homography matrix
+homography:
+  - "homography/eth.txt"
+  - "homography/hotel.txt"
+  - "homography/univ.txt"
+  - "homography/zara.txt"
+# Name of the training navigation maps in the dataPath
+trainMapping:
+  - "eth"
+  - "hotel"
+  - "zara"
+  - "zara"
+  - "univ"
+  - "univ"
+  - "univ"
+# Name of the validation navigation maps in the dataPath
+validationMapping:
+  - "eth"
+  - "hotel"
+  - "zara"
+  - "zara"
+  - "univ"
+  - "univ"
+  - "univ"
+# Name of the test navigation maps in the dataPath
+testMapping:
+  - "zara"
 # Delimiter used in the files of the dataset
 delimiter: "tab"
 # Number of frame observed
@@ -107,7 +142,7 @@ embeddingSize: 64
 # layers
 poolingModule:
   - "social"
-  - "navigation"
+  - "semantic"
 # Image width plus padding
 imageWidth: 25
 # Image height plus padding
@@ -120,6 +155,8 @@ navigationHeight: 320
 kernelSize: 2
 # Size of the neighborhood navigation grid
 navigationGrid: 33
+# Size of the neighborhood semantic grid
+semanticGridSize: 50
 
 # -----------------------------------------------------------------------------
 #                                Logger settings                              |
