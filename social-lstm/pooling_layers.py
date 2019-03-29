@@ -485,10 +485,10 @@ class SemanticPooling(Pooling):
         grid = tf.reshape(
             grid, [self.max_num_ped, self.grid_size, self.grid_size, self.num_labels]
         )
-        grid = tf.nn.avg_pool(
-            grid, [1, self.kernel_size, self.kernel_size, 1], [1, 1, 1, 1], "SAME"
-        )
-        grid = tf.reshape(grid, [self.max_num_ped, -1])
+
+        # Count the number of label and normalize it
+        grid = tf.reduce_sum(grid, [1, 2]) / (self.grid_size * self.grid_size)
+
         return self.pooling_layer(grid)
 
     def _grid_pos(self, top_left, coordinates):
