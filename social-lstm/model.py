@@ -42,6 +42,11 @@ class SocialModel:
         navigation_map = dataset.tensors[5]
         # Create the tensor for the upper left-most point in the dataset
         top_left_dataset = dataset.tensors[6]
+        # Create the tensor for the semantic map of shape
+        # [num_points, 2 + num_labels]
+        semantic_map = dataset.tensors[7]
+        # Create the tensor for the homography matrix of shape [3,3]
+        homography = dataset.tensors[8]
         # Create the tensor for the pedestrian relative coordinates of shape
         # [max_num_ped, 2]
         new_pedestrians_coordinates_rel = tf.zeros([hparams.maxNumPed, 2])
@@ -87,6 +92,9 @@ class SocialModel:
         elif hparams.poolingModule == "navigation":
             logging.info("Creating the {} pooling".format(hparams.poolingModule))
             pooling_module = pooling_layers.NavigationPooling(hparams).pooling
+        elif hparams.poolingModule == "semantic":
+            logging.info("Creating the {} pooling".format(hparams.poolingModule))
+            pooling_module = pooling_layers.SemanticPooling(hparams).pooling
 
         # Create the position estimates functions
         logging.info("Creating the social position estimate function")
@@ -99,19 +107,11 @@ class SocialModel:
         logging.info("Creating the social loss function")
         loss_function = losses.social_loss_function
 
-        # Dropout rate
-        if phase == SAMPLE:
-            hparams.set_hparam("keepProb", 1.0)
-
         # ============================ MODEL LAYERS ============================
 
         # Define the LSTM with dimension rnn_size
         with tf.variable_scope("LSTM"):
             cell = tf.nn.rnn_cell.LSTMCell(hparams.rnnSize, name="Cell")
-            # Apply dropout
-            cell = tf.nn.rnn_cell.DropoutWrapper(
-                cell, output_keep_prob=hparams.keepProb
-            )
             # Output (or hidden states) of the LSTMs
             cell_output = tf.zeros(
                 [hparams.maxNumPed, hparams.rnnSize], tf.float32, name="Output"
@@ -174,10 +174,6 @@ class SocialModel:
             pedestrians_coordinates_preprocessed = coordinates_layer(
                 current_coordinates_rel
             )
-            # Apply dropout
-            pedestrians_coordinates_preprocessed = tf.nn.dropout(
-                pedestrians_coordinates_preprocessed, hparams.keepProb
-            )
 
             # If pooling_module is not None, add the pooling layer
             if pooling_module is not None:
@@ -187,6 +183,8 @@ class SocialModel:
                     peds_mask=pedestrians_mask[frame],
                     navigation_map=navigation_map,
                     top_left_dataset=top_left_dataset,
+                    semantic_map=semantic_map,
+                    H=homography,
                 )
                 cell_input = tf.concat(
                     [pedestrians_coordinates_preprocessed, pooling_output],
@@ -201,8 +199,6 @@ class SocialModel:
 
             # Apply the linear layer to the cell output
             layered_output = output_layer(cell_output)
-            # Apply dropout
-            layered_output = tf.nn.dropout(layered_output, hparams.keepProb)
 
             # Compute the new coordinates or the pdf
             if phase == TRAIN:
